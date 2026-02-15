@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: omniway-postgres
+    environment:
+      POSTGRES_USER: omniway
+      POSTGRES_PASSWORD: omniway_dev
+      POSTGRES_DB: omniway
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omniway -d omniway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: omniway-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Uncomment for local Stripe webhook testing
+  # stripe-cli:
+  #   image: stripe/stripe-cli
+  #   container_name: omniway-stripe-cli
+  #   command: listen --forward-to http://host.docker.internal:3000/webhooks/stripe
+  #   environment:
+  #     STRIPE_API_KEY: ${STRIPE_SECRET_KEY}
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: omniway-network

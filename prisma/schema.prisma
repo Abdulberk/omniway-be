@@ -1,0 +1,796 @@
+// Omniway.ai Prisma Schema
+// Version: 1.7.7 (SHIP-READY)
+// 
+// This schema implements the complete data model for the OpenAI-compatible
+// API gateway with multi-tenant support, billing, and usage tracking.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  BILLING
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  TRIALING
+  PAUSED
+}
+
+enum WalletTxType {
+  TOPUP
+  CHARGE
+  REFUND
+  ADMIN_ADJUSTMENT
+  CHARGEBACK
+  PROMO
+}
+
+enum ApiKeyOwnerType {
+  USER
+  PROJECT
+}
+
+enum RequestStatus {
+  SUCCESS
+  CLIENT_ERROR
+  UPSTREAM_ERROR
+  TIMEOUT
+  RATE_LIMITED
+  BILLING_BLOCKED
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGOUT
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  ORG_CREATED
+  ORG_UPDATED
+  ORG_DELETED
+  MEMBER_INVITED
+  MEMBER_JOINED
+  MEMBER_REMOVED
+  MEMBER_ROLE_CHANGED
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_DELETED
+  API_KEY_CREATED
+  API_KEY_ROTATED
+  API_KEY_REVOKED
+  SUBSCRIPTION_CREATED
+  SUBSCRIPTION_UPDATED
+  SUBSCRIPTION_CANCELED
+  WALLET_TOPUP
+  WALLET_ADJUSTMENT
+  PLAN_CHANGED
+  SETTINGS_CHANGED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+// ============================================================================
+// USER & AUTHENTICATION
+// ============================================================================
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  emailVerified   DateTime? @map("email_verified")
+  passwordHash    String?   @map("password_hash")
+  name            String?
+  avatarUrl       String?   @map("avatar_url")
+  
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+  isSuperAdmin    Boolean   @default(false) @map("is_super_admin")
+  
+  // Stripe
+  stripeCustomerId String?  @unique @map("stripe_customer_id")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  lastLoginAt     DateTime? @map("last_login_at")
+  
+  // Relations
+  memberships     Membership[]
+  ownedOrganizations Organization[] @relation("OrganizationOwner")
+  apiKeys         ApiKey[]   @relation("UserApiKeys")
+  subscription    Subscription? @relation("UserSubscription")
+  walletBalance   WalletBalance? @relation("UserWallet")
+  walletLedger    WalletLedger[] @relation("UserWalletLedger")
+  auditLogs       AuditLog[] @relation("AuditLogActor")
+  notifications   NotificationPreference?
+  sentInvitations OrganizationInvitation[] @relation("InvitationInviter")
+  
+  @@map("users")
+}
+
+// ============================================================================
+// ORGANIZATION & MULTI-TENANCY
+// ============================================================================
+
+model Organization {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  
+  // Owner (for billing purposes)
+  ownerId         String    @map("owner_id")
+  owner           User      @relation("OrganizationOwner", fields: [ownerId], references: [id])
+  
+  // Stripe
+  stripeCustomerId String?  @unique @map("stripe_customer_id")
+  
+  // Settings
+  maxSeats        Int       @default(5) @map("max_seats")
+  ipAllowlist     String[]  @default([]) @map("ip_allowlist")
+  
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  memberships     Membership[]
+  projects        Project[]
+  subscription    Subscription? @relation("OrgSubscription")
+  walletBalance   WalletBalance? @relation("OrgWallet")
+  walletLedger    WalletLedger[] @relation("OrgWalletLedger")
+  invitations     OrganizationInvitation[]
+  
+  @@map("organizations")
+}
+
+model Membership {
+  id              String           @id @default(cuid())
+  
+  userId          String           @map("user_id")
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  organizationId  String           @map("organization_id")
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  role            MembershipRole   @default(DEVELOPER)
+  status          MembershipStatus @default(ACTIVE)
+  
+  // Timestamps
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  
+  @@unique([userId, organizationId])
+  @@map("memberships")
+}
+
+model Project {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String
+  description     String?
+  
+  organizationId  String    @map("organization_id")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  apiKeys         ApiKey[]  @relation("ProjectApiKeys")
+  
+  @@unique([organizationId, slug])
+  @@map("projects")
+}
+
+// ============================================================================
+// PLANS & SUBSCRIPTIONS
+// ============================================================================
+
+model Plan {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  description     String?
+  
+  // Stripe
+  stripePriceId   String?   @map("stripe_price_id")
+  stripeProductId String?   @map("stripe_product_id")
+  
+  // Pricing
+  priceMonthly    Int       @default(0) @map("price_monthly") // cents
+  priceYearly     Int       @default(0) @map("price_yearly")  // cents
+  
+  // Rate Limits (requests)
+  limitPerMinute  Int       @default(20) @map("limit_per_minute")
+  limitPerHour    Int       @default(100) @map("limit_per_hour")
+  limitPerDay     Int       @default(500) @map("limit_per_day")
+  
+  // Daily Allowance (requests granted per day at UTC reset)
+  dailyAllowance  Int       @default(500) @map("daily_allowance")
+  
+  // Concurrency
+  maxConcurrent   Int       @default(5) @map("max_concurrent")
+  
+  // Request limits
+  maxInputTokens  Int       @default(8000) @map("max_input_tokens")
+  maxOutputTokens Int       @default(4000) @map("max_output_tokens")
+  maxBodyBytes    Int       @default(1048576) @map("max_body_bytes") // 1MB default
+  
+  // Seat limits (for B2B)
+  maxSeats        Int       @default(1) @map("max_seats")
+  pricePerSeat    Int       @default(0) @map("price_per_seat") // cents
+  
+  // Model access (allowlist)
+  allowedModels   String[]  @default([]) @map("allowed_models")
+  
+  // Flags
+  isActive        Boolean   @default(true) @map("is_active")
+  isPublic        Boolean   @default(true) @map("is_public")
+  isFree          Boolean   @default(false) @map("is_free")
+  
+  // Feature flags
+  hasWalletAccess Boolean   @default(true) @map("has_wallet_access")
+  hasStreaming    Boolean   @default(true) @map("has_streaming")
+  hasPriorityQueue Boolean  @default(false) @map("has_priority_queue")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  subscriptions   Subscription[]
+  
+  @@map("plans")
+}
+
+model Subscription {
+  id              String             @id @default(cuid())
+  
+  // Owner (XOR: either userId OR organizationId, enforced via constraint)
+  userId          String?            @unique @map("user_id")
+  user            User?              @relation("UserSubscription", fields: [userId], references: [id])
+  
+  organizationId  String?            @unique @map("organization_id")
+  organization    Organization?      @relation("OrgSubscription", fields: [organizationId], references: [id])
+  
+  // Plan
+  planId          String             @map("plan_id")
+  plan            Plan               @relation(fields: [planId], references: [id])
+  
+  // Status
+  status          SubscriptionStatus @default(ACTIVE)
+  
+  // Stripe
+  stripeSubscriptionId String?       @unique @map("stripe_subscription_id")
+  
+  // Billing period
+  currentPeriodStart DateTime        @map("current_period_start")
+  currentPeriodEnd   DateTime        @map("current_period_end")
+  cancelAtPeriodEnd  Boolean         @default(false) @map("cancel_at_period_end")
+  canceledAt         DateTime?       @map("canceled_at")
+  
+  // Seat count (for B2B)
+  seatCount       Int                @default(1) @map("seat_count")
+  
+  // Timestamps
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  
+  @@map("subscriptions")
+}
+
+// ============================================================================
+// WALLET & BILLING
+// ============================================================================
+
+model WalletBalance {
+  id              String    @id @default(cuid())
+  
+  // Owner (XOR: either userId OR organizationId)
+  userId          String?   @unique @map("user_id")
+  user            User?     @relation("UserWallet", fields: [userId], references: [id])
+  
+  organizationId  String?   @unique @map("organization_id")
+  organization    Organization? @relation("OrgWallet", fields: [organizationId], references: [id])
+  
+  // Balance in cents (USD)
+  // Redis is source of truth for hot path; this is reconciled periodically
+  balanceCents    BigInt    @default(0) @map("balance_cents")
+  
+  // Lifetime totals
+  totalTopupCents BigInt    @default(0) @map("total_topup_cents")
+  totalSpentCents BigInt    @default(0) @map("total_spent_cents")
+  
+  // Status
+  isLocked        Boolean   @default(false) @map("is_locked")
+  lockedReason    String?   @map("locked_reason")
+  lockedAt        DateTime? @map("locked_at")
+  
+  // Last reconciliation
+  lastReconciledAt DateTime? @map("last_reconciled_at")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  @@map("wallet_balances")
+}
+
+model WalletLedger {
+  id              String       @id @default(cuid())
+  
+  // Owner (XOR: either userId OR organizationId)
+  userId          String?      @map("user_id")
+  user            User?        @relation("UserWalletLedger", fields: [userId], references: [id])
+  
+  organizationId  String?      @map("organization_id")
+  organization    Organization? @relation("OrgWalletLedger", fields: [organizationId], references: [id])
+  
+  // Transaction details
+  txType          WalletTxType
+  amountCents     BigInt       @map("amount_cents") // positive = credit, negative = debit
+  balanceAfter    BigInt       @map("balance_after")
+  
+  // Reference
+  requestId       String?      @map("request_id")
+  stripePaymentId String?      @map("stripe_payment_id")
+  description     String?
+  
+  // Idempotency
+  idempotencyKey  String?      @unique @map("idempotency_key")
+  
+  // Timestamps
+  createdAt       DateTime     @default(now()) @map("created_at")
+  
+  @@index([userId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("wallet_ledger")
+}
+
+model TopupPackage {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  
+  // Amount
+  amountCents     Int       @map("amount_cents") // What user pays
+  creditCents     Int       @map("credit_cents") // What user receives (can include bonus)
+  
+  // Stripe
+  stripePriceId   String?   @map("stripe_price_id")
+  
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+  isPopular       Boolean   @default(false) @map("is_popular")
+  
+  // Display order
+  sortOrder       Int       @default(0) @map("sort_order")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  @@map("topup_packages")
+}
+
+// ============================================================================
+// API KEYS
+// ============================================================================
+
+model ApiKey {
+  id              String         @id @default(cuid())
+  
+  // Key value (prefix visible, rest hashed)
+  keyPrefix       String         @map("key_prefix") // e.g., "omni_xxxx"
+  keyHash         String         @unique @map("key_hash")
+  
+  // Name for display
+  name            String
+  
+  // Owner (XOR: userId for personal keys, projectId for org keys)
+  ownerType       ApiKeyOwnerType @map("owner_type")
+  
+  userId          String?        @map("user_id")
+  user            User?          @relation("UserApiKeys", fields: [userId], references: [id], onDelete: Cascade)
+  
+  projectId       String?        @map("project_id")
+  project         Project?       @relation("ProjectApiKeys", fields: [projectId], references: [id], onDelete: Cascade)
+  
+  // Scopes (permissions)
+  scopes          String[]       @default(["chat:write", "embeddings:write"])
+  
+  // Restrictions
+  allowedIps      String[]       @default([]) @map("allowed_ips")
+  allowedModels   String[]       @default([]) @map("allowed_models")
+  
+  // Status
+  isActive        Boolean        @default(true) @map("is_active")
+  revokedAt       DateTime?      @map("revoked_at")
+  revokedReason   String?        @map("revoked_reason")
+  
+  // Usage tracking
+  lastUsedAt      DateTime?      @map("last_used_at")
+  lastUsedIp      String?        @map("last_used_ip")
+  usageCount      BigInt         @default(0) @map("usage_count")
+  
+  // Expiry
+  expiresAt       DateTime?      @map("expires_at")
+  
+  // Timestamps
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  
+  @@index([keyPrefix])
+  @@map("api_keys")
+}
+
+// ============================================================================
+// MODEL CATALOG & PRICING
+// ============================================================================
+
+model ModelCatalog {
+  id              String    @id @default(cuid())
+  
+  // Identification
+  modelId         String    @unique @map("model_id") // e.g., "gpt-4o"
+  provider        String    // e.g., "openai", "anthropic", "google"
+  displayName     String    @map("display_name")
+  description     String?
+  
+  // Routing
+  upstreamModelId String    @map("upstream_model_id") // actual model name to send
+  
+  // Capabilities
+  supportsStreaming    Boolean @default(true) @map("supports_streaming")
+  supportsVision       Boolean @default(false) @map("supports_vision")
+  supportsToolCalls    Boolean @default(false) @map("supports_tool_calls")
+  supportsFunctionCall Boolean @default(false) @map("supports_function_call")
+  supportsJson         Boolean @default(false) @map("supports_json")
+  
+  // Limits
+  maxContextTokens Int      @default(8192) @map("max_context_tokens")
+  maxOutputTokens  Int      @default(4096) @map("max_output_tokens")
+  
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+  isDeprecated    Boolean   @default(false) @map("is_deprecated")
+  deprecationDate DateTime? @map("deprecation_date")
+  
+  // Display
+  sortOrder       Int       @default(0) @map("sort_order")
+  category        String?   // e.g., "chat", "embedding", "image"
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // Relations
+  pricing         ModelRequestPricing[]
+  
+  @@map("model_catalog")
+}
+
+model ModelRequestPricing {
+  id              String    @id @default(cuid())
+  
+  modelId         String    @map("model_id")
+  model           ModelCatalog @relation(fields: [modelId], references: [id])
+  
+  // Pricing per 1M tokens (in cents USD)
+  inputPricePer1M  Int      @map("input_price_per_1m")  // cents per 1M input tokens
+  outputPricePer1M Int      @map("output_price_per_1m") // cents per 1M output tokens
+  
+  // For cost comparison display (original provider pricing)
+  originalInputPrice  Int   @map("original_input_price")
+  originalOutputPrice Int   @map("original_output_price")
+  
+  // Effective dates (for versioning)
+  effectiveFrom   DateTime  @default(now()) @map("effective_from")
+  effectiveTo     DateTime? @map("effective_to")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  
+  @@index([modelId, effectiveFrom])
+  @@map("model_request_pricing")
+}
+
+// ============================================================================
+// USAGE & METRICS
+// ============================================================================
+
+model RequestEvent {
+  id              String        @id @default(cuid())
+  requestId       String        @unique @map("request_id") // x-request-id
+  
+  // Owner context
+  ownerType       ApiKeyOwnerType @map("owner_type")
+  ownerId         String        @map("owner_id") // userId or orgId
+  projectId       String?       @map("project_id")
+  apiKeyId        String        @map("api_key_id")
+  
+  // Request details
+  model           String
+  provider        String
+  endpoint        String        // e.g., "/v1/chat/completions"
+  
+  // Status
+  status          RequestStatus
+  statusCode      Int           @map("status_code")
+  errorType       String?       @map("error_type")
+  errorMessage    String?       @map("error_message")
+  
+  // Timing
+  latencyMs       Int           @map("latency_ms")
+  ttfbMs          Int?          @map("ttfb_ms") // Time to first byte
+  
+  // Token counts (if available)
+  inputTokens     Int?          @map("input_tokens")
+  outputTokens    Int?          @map("output_tokens")
+  
+  // Byte counts
+  inputBytes      Int           @map("input_bytes")
+  outputBytes     Int           @map("output_bytes")
+  
+  // Billing
+  billingSource   String?       @map("billing_source") // "allowance" or "wallet"
+  costCents       Int?          @map("cost_cents")
+  
+  // Pricing snapshot reference
+  pricingSnapshotId String?     @map("pricing_snapshot_id")
+  
+  // Streaming
+  isStreaming     Boolean       @default(false) @map("is_streaming")
+  streamChunks    Int?          @map("stream_chunks")
+  
+  // Client info
+  clientIp        String?       @map("client_ip")
+  userAgent       String?       @map("user_agent")
+  
+  // Timestamps
+  createdAt       DateTime      @default(now()) @map("created_at")
+  
+  @@index([ownerId, createdAt])
+  @@index([apiKeyId, createdAt])
+  @@index([model, createdAt])
+  @@index([createdAt])
+  @@map("request_events")
+}
+
+model PricingSnapshot {
+  id              String    @id @default(cuid())
+  
+  // Snapshot of all model pricing at a point in time
+  snapshotData    Json      @map("snapshot_data")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  
+  @@map("pricing_snapshots")
+}
+
+model UsageDaily {
+  id              String    @id @default(cuid())
+  
+  // Owner
+  ownerType       ApiKeyOwnerType @map("owner_type")
+  ownerId         String    @map("owner_id")
+  
+  // Date (UTC)
+  date            DateTime  @db.Date
+  
+  // Aggregated counts
+  requestCount    Int       @default(0) @map("request_count")
+  successCount    Int       @default(0) @map("success_count")
+  errorCount      Int       @default(0) @map("error_count")
+  
+  // Token totals
+  totalInputTokens  BigInt  @default(0) @map("total_input_tokens")
+  totalOutputTokens BigInt  @default(0) @map("total_output_tokens")
+  
+  // Cost totals
+  totalCostCents  BigInt    @default(0) @map("total_cost_cents")
+  
+  // Allowance usage
+  allowanceUsed   Int       @default(0) @map("allowance_used")
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  @@unique([ownerType, ownerId, date])
+  @@index([ownerId, date])
+  @@map("usage_daily")
+}
+
+// ============================================================================
+// STRIPE & WEBHOOKS
+// ============================================================================
+
+model StripeEvent {
+  id              String    @id @default(cuid())
+  
+  // Stripe event details
+  stripeEventId   String    @unique @map("stripe_event_id")
+  eventType       String    @map("event_type")
+  
+  // Processing status
+  processed       Boolean   @default(false)
+  processedAt     DateTime? @map("processed_at")
+  error           String?
+  retryCount      Int       @default(0) @map("retry_count")
+  
+  // Raw payload (for debugging/replay)
+  payload         Json
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  
+  @@index([eventType, processed])
+  @@map("stripe_events")
+}
+
+// ============================================================================
+// AUDIT & SECURITY
+// ============================================================================
+
+model AuditLog {
+  id              String      @id @default(cuid())
+  
+  // Actor
+  actorId         String?     @map("actor_id")
+  actor           User?       @relation("AuditLogActor", fields: [actorId], references: [id])
+  actorType       String      @map("actor_type") // "user", "system", "stripe"
+  
+  // Action
+  action          AuditAction
+  
+  // Target
+  targetType      String      @map("target_type") // "user", "org", "api_key", etc.
+  targetId        String      @map("target_id")
+  
+  // Details
+  metadata        Json?
+  ipAddress       String?     @map("ip_address")
+  userAgent       String?     @map("user_agent")
+  
+  // Timestamps
+  createdAt       DateTime    @default(now()) @map("created_at")
+  
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model NotificationPreference {
+  id              String    @id @default(cuid())
+  
+  userId          String    @unique @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Email preferences
+  emailUsageAlerts    Boolean @default(true) @map("email_usage_alerts")
+  emailBillingAlerts  Boolean @default(true) @map("email_billing_alerts")
+  emailSecurityAlerts Boolean @default(true) @map("email_security_alerts")
+  emailProductUpdates Boolean @default(false) @map("email_product_updates")
+  
+  // Thresholds for alerts
+  usageAlertThreshold Int     @default(80) @map("usage_alert_threshold") // percentage
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  @@map("notification_preferences")
+}
+
+// ============================================================================
+// ORGANIZATION INVITATIONS
+// ============================================================================
+
+model OrganizationInvitation {
+  id              String           @id @default(cuid())
+  
+  organizationId  String           @map("organization_id")
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Inviter
+  invitedById     String           @map("invited_by_id")
+  invitedBy       User             @relation("InvitationInviter", fields: [invitedById], references: [id])
+  
+  // Invitee
+  email           String
+  role            MembershipRole   @default(DEVELOPER)
+  
+  // Token for accepting
+  token           String           @unique
+  
+  // Status
+  status          InvitationStatus @default(PENDING)
+  
+  // Expiry
+  expiresAt       DateTime         @map("expires_at")
+  
+  // Timestamps
+  createdAt       DateTime         @default(now()) @map("created_at")
+  acceptedAt      DateTime?        @map("accepted_at")
+  
+  @@index([email, status])
+  @@index([organizationId, status])
+  @@map("organization_invitations")
+}
+
+// ============================================================================
+// UPSTREAM PROVIDER CONFIGURATION
+// ============================================================================
+
+model UpstreamApiKey {
+  id              String    @id @default(cuid())
+  
+  // Provider identification
+  provider        String    // "openai", "anthropic", "google"
+  name            String    // Display name
+  
+  // Key (encrypted at rest)
+  encryptedKey    String    @map("encrypted_key")
+  
+  // Base URL
+  baseUrl         String    @map("base_url")
+  
+  // Status
+  isActive        Boolean   @default(true) @map("is_active")
+  isPrimary       Boolean   @default(false) @map("is_primary")
+  
+  // Health
+  lastHealthCheck DateTime? @map("last_health_check")
+  healthStatus    String?   @map("health_status")
+  
+  // Rate limiting (for provider limits)
+  rateLimit       Int?      @map("rate_limit")
+  rateLimitWindow Int?      @map("rate_limit_window") // seconds
+  
+  // Timestamps
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  @@unique([provider, isPrimary])
+  @@map("upstream_api_keys")
+}
