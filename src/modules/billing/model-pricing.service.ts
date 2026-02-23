@@ -10,16 +10,19 @@ import { ModelPricing } from './interfaces/billing.interfaces';
 @Injectable()
 export class ModelPricingService {
   private readonly logger = new Logger(ModelPricingService.name);
-  
+
   // Local cache TTL (5 minutes)
   private readonly CACHE_TTL_MS = 5 * 60 * 1000;
-  
+
   // Redis cache TTL (10 minutes)
   private readonly REDIS_CACHE_TTL_SECONDS = 600;
-  
+
   // In-memory cache
-  private pricingCache: Map<string, { pricing: ModelPricing; expiresAt: number }> = new Map();
-  
+  private pricingCache: Map<
+    string,
+    { pricing: ModelPricing; expiresAt: number }
+  > = new Map();
+
   // Default pricing per request (in cents) - fallback if model not found
   private readonly DEFAULT_PRICE_CENTS = 1; // 1 cent per request
 
@@ -57,10 +60,10 @@ export class ModelPricingService {
 
     // Load from database
     const pricing = await this.loadPricingFromDb(modelId);
-    
+
     // Cache in both levels
     await this.cachePricing(modelId, pricing);
-    
+
     return pricing;
   }
 
@@ -71,17 +74,14 @@ export class ModelPricingService {
     try {
       // Get the current effective pricing for this model
       const now = new Date();
-      
+
       const pricing = await this.prisma.modelRequestPricing.findFirst({
         where: {
           model: {
             modelId: modelId,
           },
           effectiveFrom: { lte: now },
-          OR: [
-            { effectiveTo: null },
-            { effectiveTo: { gt: now } },
-          ],
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
         },
         orderBy: {
           effectiveFrom: 'desc',
@@ -92,7 +92,9 @@ export class ModelPricingService {
       });
 
       if (!pricing) {
-        this.logger.warn(`No pricing found for model ${modelId}, using default`);
+        this.logger.warn(
+          `No pricing found for model ${modelId}, using default`,
+        );
         return this.getDefaultPricing(modelId);
       }
 
@@ -100,11 +102,16 @@ export class ModelPricingService {
       // For simplicity, we use input price per 1M tokens / 1000 requests
       // This assumes ~1000 tokens per request average
       const avgTokensPerRequest = 1000;
-      const inputCostPerRequest = (pricing.inputPricePer1M / 1_000_000) * avgTokensPerRequest;
-      const outputCostPerRequest = (pricing.outputPricePer1M / 1_000_000) * avgTokensPerRequest;
-      
+      const inputCostPerRequest =
+        (pricing.inputPricePer1M / 1_000_000) * avgTokensPerRequest;
+      const outputCostPerRequest =
+        (pricing.outputPricePer1M / 1_000_000) * avgTokensPerRequest;
+
       // Total cost in cents, minimum 1 cent
-      const priceCents = Math.max(1, Math.ceil(inputCostPerRequest + outputCostPerRequest));
+      const priceCents = Math.max(
+        1,
+        Math.ceil(inputCostPerRequest + outputCostPerRequest),
+      );
 
       return {
         modelId,
@@ -133,7 +140,10 @@ export class ModelPricingService {
   /**
    * Cache pricing in memory and Redis
    */
-  private async cachePricing(modelId: string, pricing: ModelPricing): Promise<void> {
+  private async cachePricing(
+    modelId: string,
+    pricing: ModelPricing,
+  ): Promise<void> {
     // Memory cache
     this.pricingCache.set(modelId, {
       pricing,
@@ -143,13 +153,14 @@ export class ModelPricingService {
     // Redis cache
     const redisKey = `pricing:${modelId}`;
     try {
-      await this.redis.getClient().setex(
-        redisKey,
-        this.REDIS_CACHE_TTL_SECONDS,
-        JSON.stringify(pricing),
-      );
+      await this.redis
+        .getClient()
+        .setex(redisKey, this.REDIS_CACHE_TTL_SECONDS, JSON.stringify(pricing));
     } catch (error) {
-      this.logger.error(`Failed to cache pricing in Redis for ${modelId}`, error);
+      this.logger.error(
+        `Failed to cache pricing in Redis for ${modelId}`,
+        error,
+      );
     }
   }
 
@@ -162,7 +173,10 @@ export class ModelPricingService {
     try {
       await this.redis.getClient().del(redisKey);
     } catch (error) {
-      this.logger.error(`Failed to invalidate pricing cache for ${modelId}`, error);
+      this.logger.error(
+        `Failed to invalidate pricing cache for ${modelId}`,
+        error,
+      );
     }
   }
 

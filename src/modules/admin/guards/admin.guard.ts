@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { FastifyRequest } from 'fastify';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { JwtService, JwtPayload } from '../../auth/jwt.service';
 
 /**
  * Extended request interface for admin routes
@@ -22,13 +23,15 @@ export interface AdminRequest extends FastifyRequest {
 /**
  * Guard for admin-only routes
  * Requires JWT authentication and superadmin status
- * 
- * For MVP, we check a simple Authorization header with user ID
- * In production, replace with proper JWT validation
+ *
+ * SECURITY: Validates JWT signature and claims before checking admin status
  */
 @Injectable()
 export class AdminGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AdminRequest>();
@@ -38,17 +41,27 @@ export class AdminGuard implements CanActivate {
       throw new UnauthorizedException('Authorization header is required');
     }
 
-    // For MVP: Bearer <user_id> format
-    // In production: Replace with JWT validation
     const [bearer, token] = authHeader.split(' ');
-    
+
     if (bearer?.toLowerCase() !== 'bearer' || !token) {
       throw new UnauthorizedException('Invalid authorization format');
     }
 
-    // Check if this is a valid user and is super admin
+    // Verify JWT token and extract payload
+    let payload: JwtPayload;
+    try {
+      payload = this.jwtService.verify(token);
+    } catch (err) {
+      throw new UnauthorizedException(
+        err instanceof UnauthorizedException
+          ? err.message
+          : 'Invalid or expired token',
+      );
+    }
+
+    // Check if user exists and is super admin
     const user = await this.prisma.user.findUnique({
-      where: { id: token },
+      where: { id: payload.sub },
       select: {
         id: true,
         email: true,

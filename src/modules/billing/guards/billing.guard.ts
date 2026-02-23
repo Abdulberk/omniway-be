@@ -34,7 +34,7 @@ export interface RequestWithBilling extends FastifyRequest {
 /**
  * Billing Guard
  * Enforces allowance-or-wallet billing before request processing
- * 
+ *
  * Guard Order: Auth → RateLimit → Concurrency → ModelAccess → BillingGuard → Proxy
  */
 @Injectable()
@@ -45,7 +45,11 @@ export class BillingGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<
-      FastifyRequest & { authContext: AuthContext; _requestId: string; _model: string }
+      FastifyRequest & {
+        authContext: AuthContext;
+        _requestId: string;
+        _model: string;
+      }
     >();
 
     const authContext = request.authContext;
@@ -80,7 +84,8 @@ export class BillingGuard implements CanActivate {
     }
 
     // Get or generate request ID
-    const requestId = request._requestId || 
+    const requestId =
+      request._requestId ||
       (request.headers['x-request-id'] as string) ||
       (request.headers['idempotency-key'] as string) ||
       this.generateRequestId();
@@ -89,7 +94,11 @@ export class BillingGuard implements CanActivate {
     request._requestId = requestId;
 
     try {
-      const result = await this.billingService.chargeBilling(authContext, requestId, model);
+      const result = await this.billingService.chargeBilling(
+        authContext,
+        requestId,
+        model,
+      );
 
       // Handle billing result
       switch (result.code) {
@@ -110,12 +119,14 @@ export class BillingGuard implements CanActivate {
         case 2:
           // Idempotent hit - already processed
           // For streaming requests, return 409 Conflict
-          const isStreaming = (request.body as { stream?: boolean })?.stream === true;
+          const isStreaming =
+            (request.body as { stream?: boolean })?.stream === true;
           if (isStreaming) {
             throw new HttpException(
               {
                 error: {
-                  message: 'Streaming request already processed. Use a new Idempotency-Key for retries.',
+                  message:
+                    'Streaming request already processed. Use a new Idempotency-Key for retries.',
                   type: 'idempotency_error',
                   code: 'idempotency_conflict',
                   request_id: requestId,
@@ -124,7 +135,7 @@ export class BillingGuard implements CanActivate {
               HttpStatus.CONFLICT,
             );
           }
-          
+
           // For non-streaming, attach billing info (will try to serve cached response)
           (request as unknown as RequestWithBilling).billingResult = {
             source: result.source as 'allowance' | 'wallet',
@@ -174,14 +185,19 @@ export class BillingGuard implements CanActivate {
    * Handle insufficient funds response
    */
   private handleInsufficientFunds(
-    result: { source: string; chargedCents: number; walletBalanceCents: string },
+    result: {
+      source: string;
+      chargedCents: number;
+      walletBalanceCents: string;
+    },
     authContext: AuthContext,
   ): never {
     if (result.source === 'locked') {
       throw new HttpException(
         {
           error: {
-            message: 'Your account is temporarily locked due to a payment dispute. Please contact support.',
+            message:
+              'Your account is temporarily locked due to a payment dispute. Please contact support.',
             type: 'account_locked',
             code: 'dispute_pending',
             support_url: 'https://support.omniway.ai',
@@ -193,11 +209,12 @@ export class BillingGuard implements CanActivate {
 
     // Insufficient wallet balance
     const upgradeUrl = 'https://app.omniway.ai/billing';
-    
+
     throw new HttpException(
       {
         error: {
-          message: 'Daily allowance depleted and insufficient wallet balance. Please top-up or upgrade.',
+          message:
+            'Daily allowance depleted and insufficient wallet balance. Please top-up or upgrade.',
           type: 'insufficient_wallet',
           code: 'payment_required',
           wallet_balance_cents: result.walletBalanceCents,

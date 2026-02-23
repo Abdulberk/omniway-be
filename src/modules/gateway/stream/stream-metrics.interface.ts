@@ -4,28 +4,28 @@
 export interface StreamMetrics {
   /** Request ID */
   requestId: string;
-  
+
   /** Time to first byte in milliseconds (null if no data received) */
   ttfbMs: number | null;
-  
+
   /** Total latency in milliseconds */
   totalLatencyMs: number;
-  
+
   /** Number of SSE chunks received */
   chunkCount: number;
-  
+
   /** Total output bytes */
   outputBytes: number;
-  
+
   /** Stream completion status */
   status: StreamStatus;
-  
+
   /** Error message if status is ERROR */
   errorMessage?: string;
-  
+
   /** Upstream HTTP status code (if available) */
   upstreamStatus?: number;
-  
+
   /** Token usage from final chunk (if available) */
   usage?: {
     promptTokens: number;
@@ -36,12 +36,12 @@ export interface StreamMetrics {
 /**
  * Stream completion status
  */
-export type StreamStatus = 
-  | 'COMPLETED'      // Stream finished successfully with [DONE]
-  | 'CLIENT_ABORT'   // Client disconnected
+export type StreamStatus =
+  | 'COMPLETED' // Stream finished successfully with [DONE]
+  | 'CLIENT_ABORT' // Client disconnected
   | 'UPSTREAM_ERROR' // Upstream returned error
-  | 'TIMEOUT'        // Stream duration exceeded limit
-  | 'ERROR';         // Generic error
+  | 'TIMEOUT' // Stream duration exceeded limit
+  | 'ERROR'; // Generic error
 
 /**
  * Options for stream wrapper
@@ -49,13 +49,13 @@ export type StreamStatus =
 export interface StreamWrapperOptions {
   /** Maximum stream duration in milliseconds */
   maxDurationMs: number;
-  
+
   /** Callback when stream metrics are available */
   onMetrics?: (metrics: StreamMetrics) => void;
-  
+
   /** Callback when first chunk received */
   onFirstChunk?: (ttfbMs: number) => void;
-  
+
   /** Callback on stream error */
   onError?: (error: Error) => void;
 }

@@ -9,14 +9,14 @@ import {
 
 /**
  * Usage Service
- * 
+ *
  * Handles emitting request completed events to BullMQ for async processing.
  * Events are batched internally for efficiency.
  */
 @Injectable()
 export class UsageService implements OnModuleInit {
   private readonly logger = new Logger(UsageService.name);
-  
+
   // Event buffer for batching
   private eventBuffer: RequestCompletedEvent[] = [];
   private readonly BATCH_SIZE = 100;
@@ -30,7 +30,7 @@ export class UsageService implements OnModuleInit {
   onModuleInit() {
     // Start periodic flush interval
     this.flushInterval = setInterval(() => {
-      this.flushBuffer().catch(err => {
+      this.flushBuffer().catch((err) => {
         this.logger.error('Failed to flush event buffer:', err);
       });
     }, this.FLUSH_INTERVAL_MS);
@@ -43,7 +43,7 @@ export class UsageService implements OnModuleInit {
    */
   async emitRequestCompleted(event: RequestCompletedEvent): Promise<void> {
     this.eventBuffer.push(event);
-    
+
     // Flush immediately if batch size reached
     if (this.eventBuffer.length >= this.BATCH_SIZE) {
       await this.flushBuffer();
@@ -74,14 +74,14 @@ export class UsageService implements OnModuleInit {
           },
           removeOnComplete: {
             count: 1000, // Keep last 1000 completed jobs
-            age: 3600,   // Or jobs older than 1 hour
+            age: 3600, // Or jobs older than 1 hour
           },
           removeOnFail: {
             count: 5000, // Keep last 5000 failed jobs for debugging
           },
         },
       );
-      
+
       this.logger.debug(`Flushed ${events.length} events to queue`);
     } catch (error) {
       // Put events back in buffer on failure
@@ -99,7 +99,7 @@ export class UsageService implements OnModuleInit {
       clearInterval(this.flushInterval);
       this.flushInterval = null;
     }
-    
+
     await this.flushBuffer();
     this.logger.log('UsageService force flushed');
   }

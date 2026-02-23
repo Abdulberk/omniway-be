@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../../redis/redis.service';
 import { CircuitState } from './interfaces/gateway.interfaces';
@@ -29,7 +33,7 @@ export class CircuitBreakerService {
    */
   async isOpen(provider: string): Promise<boolean> {
     const state = await this.getState(provider);
-    
+
     if (state.status === 'open') {
       // Check if we should transition to half-open
       if (state.nextRetry && Date.now() >= state.nextRetry) {
@@ -48,7 +52,7 @@ export class CircuitBreakerService {
   async checkCircuit(provider: string): Promise<void> {
     if (await this.isOpen(provider)) {
       this.logger.warn(`Circuit breaker OPEN for provider: ${provider}`);
-      
+
       throw new ServiceUnavailableException({
         error: {
           message: `Service temporarily unavailable. Please try again later.`,
@@ -64,7 +68,7 @@ export class CircuitBreakerService {
    */
   async recordSuccess(provider: string): Promise<void> {
     const state = await this.getState(provider);
-    
+
     if (state.status === 'half-open') {
       // Success in half-open means we can close the circuit
       await this.close(provider);
@@ -78,7 +82,7 @@ export class CircuitBreakerService {
   async recordFailure(provider: string): Promise<void> {
     const key = this.getKey(provider);
     const state = await this.getState(provider);
-    
+
     const newFailures = state.failures + 1;
     const now = Date.now();
 
@@ -92,7 +96,9 @@ export class CircuitBreakerService {
     if (newFailures >= this.threshold) {
       // Threshold exceeded, open the circuit
       await this.open(provider);
-      this.logger.warn(`Circuit breaker OPENED for provider: ${provider} (${newFailures} failures)`);
+      this.logger.warn(
+        `Circuit breaker OPENED for provider: ${provider} (${newFailures} failures)`,
+      );
     } else {
       // Update failure count
       const newState: CircuitState = {
@@ -101,7 +107,7 @@ export class CircuitBreakerService {
         lastFailure: now,
         nextRetry: null,
       };
-      
+
       await this.redis.getClient().setex(
         key,
         Math.ceil(this.resetMs / 1000) * 2, // TTL longer than reset
@@ -116,7 +122,7 @@ export class CircuitBreakerService {
   async getState(provider: string): Promise<CircuitState> {
     const key = this.getKey(provider);
     const data = await this.redis.getClient().get(key);
-    
+
     if (!data) {
       return {
         status: 'closed',
@@ -144,7 +150,7 @@ export class CircuitBreakerService {
   private async open(provider: string): Promise<void> {
     const key = this.getKey(provider);
     const now = Date.now();
-    
+
     const state: CircuitState = {
       status: 'open',
       failures: this.threshold,
@@ -152,11 +158,9 @@ export class CircuitBreakerService {
       nextRetry: now + this.resetMs,
     };
 
-    await this.redis.getClient().setex(
-      key,
-      Math.ceil(this.resetMs / 1000) * 2,
-      JSON.stringify(state),
-    );
+    await this.redis
+      .getClient()
+      .setex(key, Math.ceil(this.resetMs / 1000) * 2, JSON.stringify(state));
   }
 
   /**
@@ -165,7 +169,7 @@ export class CircuitBreakerService {
   private async setHalfOpen(provider: string): Promise<void> {
     const key = this.getKey(provider);
     const state = await this.getState(provider);
-    
+
     const newState: CircuitState = {
       status: 'half-open',
       failures: state.failures,
@@ -173,12 +177,10 @@ export class CircuitBreakerService {
       nextRetry: null,
     };
 
-    await this.redis.getClient().setex(
-      key,
-      Math.ceil(this.resetMs / 1000),
-      JSON.stringify(newState),
-    );
-    
+    await this.redis
+      .getClient()
+      .setex(key, Math.ceil(this.resetMs / 1000), JSON.stringify(newState));
+
     this.logger.log(`Circuit breaker HALF-OPEN for provider: ${provider}`);
   }
 

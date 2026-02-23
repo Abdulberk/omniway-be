@@ -48,7 +48,7 @@ export class GatewayController {
     private readonly modelService: ModelService,
     private readonly refundService: RefundService,
     private readonly usageService: UsageService,
-  ) { }
+  ) {}
 
   /**
    * POST /v1/chat/completions
@@ -133,7 +133,7 @@ export class GatewayController {
 
             this.logger.log(
               `Processing refund for TTFB=0 failure: request ${requestId}, ` +
-              `amount: ${billingResult.chargedCents} cents`,
+                `amount: ${billingResult.chargedCents} cents`,
             );
 
             const refundResult = await this.refundService.processRefund({
@@ -186,7 +186,7 @@ export class GatewayController {
           outputBytes: streamMetrics.outputBytes ?? 0,
           billingSource:
             reqWithBilling.billingResult?.source === 'allowance' ||
-              reqWithBilling.billingResult?.source === 'wallet'
+            reqWithBilling.billingResult?.source === 'wallet'
               ? reqWithBilling.billingResult.source
               : undefined,
           costCents: reqWithBilling.billingResult?.chargedCents,
@@ -255,7 +255,7 @@ export class GatewayController {
           outputBytes: responseStr.length,
           billingSource:
             reqWithBilling.billingResult?.source === 'allowance' ||
-              reqWithBilling.billingResult?.source === 'wallet'
+            reqWithBilling.billingResult?.source === 'wallet'
               ? reqWithBilling.billingResult.source
               : undefined,
           costCents: reqWithBilling.billingResult?.chargedCents,
@@ -295,7 +295,7 @@ export class GatewayController {
         outputBytes: 0,
         billingSource:
           reqWithBilling.billingResult?.source === 'allowance' ||
-            reqWithBilling.billingResult?.source === 'wallet'
+          reqWithBilling.billingResult?.source === 'wallet'
             ? reqWithBilling.billingResult.source
             : undefined,
         costCents: reqWithBilling.billingResult?.chargedCents,

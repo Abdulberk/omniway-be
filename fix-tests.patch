@@ -1,0 +1,8 @@
+Fix test issues:
+
+1. billing.service.spec.ts - Remove invalid "rateLimit" from policy mock
+2. api-key.service.spec.ts - Fix createUserApiKey signature and return value
+3. policy.service.spec.ts - Fix org/project subscription query and CANCELED status handling
+4. rate-limit/gateway tests - Fix import paths (should be ../../../redis not ../../redis)
+5. circuit-breaker.service.spec.ts - Fix config indexing type
+6. model.service.spec.ts - Fix array access and import paths

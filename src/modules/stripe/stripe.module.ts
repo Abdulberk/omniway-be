@@ -7,14 +7,14 @@ import { STRIPE_QUEUES } from './interfaces/stripe.interfaces';
 import { BillingModule } from '../billing/billing.module';
 
 @Module({
-    imports: [
-        BullModule.registerQueue({
-            name: STRIPE_QUEUES.WEBHOOKS,
-        }),
-        BillingModule,
-    ],
-    controllers: [StripeWebhookController],
-    providers: [StripeService, StripeWebhookProcessor],
-    exports: [StripeService],
+  imports: [
+    BullModule.registerQueue({
+      name: STRIPE_QUEUES.WEBHOOKS,
+    }),
+    BillingModule,
+  ],
+  controllers: [StripeWebhookController],
+  providers: [StripeService, StripeWebhookProcessor],
+  exports: [StripeService],
 })
-export class StripeModule { }
+export class StripeModule {}

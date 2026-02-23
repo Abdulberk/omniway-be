@@ -27,7 +27,7 @@ export class ApiKeyService {
     const key = `omni_${randomPart}`;
     const prefix = key.substring(0, 12); // "omni_" + first 7 chars
     const hash = this.hashKey(key);
-    
+
     return { key, prefix, hash };
   }
 
@@ -41,7 +41,9 @@ export class ApiKeyService {
   /**
    * Validate an API key from the Authorization header
    */
-  async validateApiKey(authHeader: string | undefined): Promise<ApiKeyValidation> {
+  async validateApiKey(
+    authHeader: string | undefined,
+  ): Promise<ApiKeyValidation> {
     if (!authHeader) {
       return { isValid: false, reason: 'Missing Authorization header' };
     }
@@ -80,10 +82,12 @@ export class ApiKeyService {
   /**
    * Get API key from cache
    */
-  private async getCachedApiKey(keyHash: string): Promise<ApiKeyValidation['apiKey'] | null> {
+  private async getCachedApiKey(
+    keyHash: string,
+  ): Promise<ApiKeyValidation['apiKey'] | null> {
     const cacheKey = AUTH_CACHE_KEYS.apiKeyByHash(keyHash);
     const cached = await this.redis.getClient().get(cacheKey);
-    
+
     if (!cached) {
       return null;
     }
@@ -98,19 +102,22 @@ export class ApiKeyService {
   /**
    * Cache API key data
    */
-  private async cacheApiKey(keyHash: string, apiKey: ApiKeyValidation['apiKey']): Promise<void> {
+  private async cacheApiKey(
+    keyHash: string,
+    apiKey: ApiKeyValidation['apiKey'],
+  ): Promise<void> {
     const cacheKey = AUTH_CACHE_KEYS.apiKeyByHash(keyHash);
-    await this.redis.getClient().setex(
-      cacheKey,
-      AUTH_CACHE_TTL.apiKey,
-      JSON.stringify(apiKey),
-    );
+    await this.redis
+      .getClient()
+      .setex(cacheKey, AUTH_CACHE_TTL.apiKey, JSON.stringify(apiKey));
   }
 
   /**
    * Fetch API key from database
    */
-  private async fetchApiKeyFromDb(keyHash: string): Promise<ApiKeyValidation['apiKey'] | null> {
+  private async fetchApiKeyFromDb(
+    keyHash: string,
+  ): Promise<ApiKeyValidation['apiKey'] | null> {
     const apiKey = await this.prisma.apiKey.findUnique({
       where: { keyHash },
       select: {
@@ -154,7 +161,9 @@ export class ApiKeyService {
   /**
    * Validate cached key data
    */
-  private validateCachedKey(apiKey: ApiKeyValidation['apiKey']): ApiKeyValidation {
+  private validateCachedKey(
+    apiKey: ApiKeyValidation['apiKey'],
+  ): ApiKeyValidation {
     if (!apiKey) {
       return { isValid: false, reason: 'Invalid API key' };
     }

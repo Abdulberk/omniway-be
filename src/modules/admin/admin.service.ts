@@ -41,7 +41,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
-  ) { }
+  ) {}
 
   // ==================== PLAN MANAGEMENT ====================
 
@@ -537,12 +537,12 @@ export class AdminService {
         lastLoginAt: u.lastLoginAt,
         subscription: u.subscription
           ? {
-            id: u.subscription.id,
-            planId: u.subscription.planId,
-            planName: u.subscription.plan.name,
-            status: u.subscription.status,
-            currentPeriodEnd: u.subscription.currentPeriodEnd,
-          }
+              id: u.subscription.id,
+              planId: u.subscription.planId,
+              planName: u.subscription.plan.name,
+              status: u.subscription.status,
+              currentPeriodEnd: u.subscription.currentPeriodEnd,
+            }
           : null,
         walletBalance: u.walletBalance?.balanceCents.toString() || '0',
       })),
@@ -581,12 +581,12 @@ export class AdminService {
       lastLoginAt: user.lastLoginAt,
       subscription: user.subscription
         ? {
-          id: user.subscription.id,
-          planId: user.subscription.planId,
-          planName: user.subscription.plan.name,
-          status: user.subscription.status,
-          currentPeriodEnd: user.subscription.currentPeriodEnd,
-        }
+            id: user.subscription.id,
+            planId: user.subscription.planId,
+            planName: user.subscription.plan.name,
+            status: user.subscription.status,
+            currentPeriodEnd: user.subscription.currentPeriodEnd,
+          }
         : null,
       walletBalance: user.walletBalance?.balanceCents.toString() || '0',
     };
@@ -759,12 +759,12 @@ export class AdminService {
         memberCount: o._count.memberships,
         subscription: o.subscription
           ? {
-            id: o.subscription.id,
-            planId: o.subscription.planId,
-            planName: o.subscription.plan.name,
-            status: o.subscription.status,
-            currentPeriodEnd: o.subscription.currentPeriodEnd,
-          }
+              id: o.subscription.id,
+              planId: o.subscription.planId,
+              planName: o.subscription.plan.name,
+              status: o.subscription.status,
+              currentPeriodEnd: o.subscription.currentPeriodEnd,
+            }
           : null,
         walletBalance: o.walletBalance?.balanceCents.toString() || '0',
       })),
@@ -805,12 +805,12 @@ export class AdminService {
       memberCount: org._count.memberships,
       subscription: org.subscription
         ? {
-          id: org.subscription.id,
-          planId: org.subscription.planId,
-          planName: org.subscription.plan.name,
-          status: org.subscription.status,
-          currentPeriodEnd: org.subscription.currentPeriodEnd,
-        }
+            id: org.subscription.id,
+            planId: org.subscription.planId,
+            planName: org.subscription.plan.name,
+            status: org.subscription.status,
+            currentPeriodEnd: org.subscription.currentPeriodEnd,
+          }
         : null,
       walletBalance: org.walletBalance?.balanceCents.toString() || '0',
     };

@@ -1,4 +1,8 @@
-import { SubscriptionStatus, WalletTxType, MembershipRole } from '@prisma/client';
+import {
+  SubscriptionStatus,
+  WalletTxType,
+  MembershipRole,
+} from '@prisma/client';
 
 /**
  * Account interfaces for self-service APIs

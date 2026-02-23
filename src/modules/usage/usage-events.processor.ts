@@ -11,7 +11,7 @@ import {
 
 /**
  * Usage Events Processor
- * 
+ *
  * Processes batched request events and persists them to the database.
  * Also triggers daily aggregation updates.
  */
@@ -27,7 +27,7 @@ export class UsageEventsProcessor extends WorkerHost {
 
   async process(job: Job<UsageJobData>): Promise<void> {
     const { events } = job.data;
-    
+
     if (!events || events.length === 0) {
       this.logger.debug('Empty events batch, skipping');
       return;
@@ -38,10 +38,10 @@ export class UsageEventsProcessor extends WorkerHost {
     try {
       // 1. Batch insert request events
       await this.insertRequestEvents(events);
-      
+
       // 2. Update daily aggregates
       await this.updateDailyAggregates(events);
-      
+
       this.logger.debug(`Successfully processed ${events.length} events`);
     } catch (error) {
       this.logger.error(
@@ -55,8 +55,10 @@ export class UsageEventsProcessor extends WorkerHost {
   /**
    * Batch insert request events to database
    */
-  private async insertRequestEvents(events: RequestCompletedEvent[]): Promise<void> {
-    const data = events.map(event => ({
+  private async insertRequestEvents(
+    events: RequestCompletedEvent[],
+  ): Promise<void> {
+    const data = events.map((event) => ({
       requestId: event.requestId,
       ownerType: event.ownerType,
       ownerId: event.ownerId,
@@ -96,20 +98,25 @@ export class UsageEventsProcessor extends WorkerHost {
    * Update daily usage aggregates
    * Groups events by owner and date, then upserts aggregates
    */
-  private async updateDailyAggregates(events: RequestCompletedEvent[]): Promise<void> {
+  private async updateDailyAggregates(
+    events: RequestCompletedEvent[],
+  ): Promise<void> {
     // Group events by owner+date
-    const aggregateMap = new Map<string, {
-      ownerType: RequestCompletedEvent['ownerType'];
-      ownerId: string;
-      date: Date;
-      requestCount: number;
-      successCount: number;
-      errorCount: number;
-      totalInputTokens: bigint;
-      totalOutputTokens: bigint;
-      totalCostCents: bigint;
-      allowanceUsed: number;
-    }>();
+    const aggregateMap = new Map<
+      string,
+      {
+        ownerType: RequestCompletedEvent['ownerType'];
+        ownerId: string;
+        date: Date;
+        requestCount: number;
+        successCount: number;
+        errorCount: number;
+        totalInputTokens: bigint;
+        totalOutputTokens: bigint;
+        totalCostCents: bigint;
+        allowanceUsed: number;
+      }
+    >();
 
     for (const event of events) {
       // Get UTC date (start of day)
@@ -135,7 +142,7 @@ export class UsageEventsProcessor extends WorkerHost {
       }
 
       aggregate.requestCount++;
-      
+
       if (isSuccessStatus(event.status)) {
         aggregate.successCount++;
       } else {

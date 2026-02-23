@@ -37,7 +37,7 @@ export class PolicyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
-  ) { }
+  ) {}
 
   /**
    * Get policy for an owner (user or org)
@@ -103,11 +103,9 @@ export class PolicyService {
     policy: ResolvedPolicy,
   ): Promise<void> {
     const cacheKey = AUTH_CACHE_KEYS.policy(ownerType, ownerId);
-    await this.redis.getClient().setex(
-      cacheKey,
-      AUTH_CACHE_TTL.policy,
-      JSON.stringify(policy),
-    );
+    await this.redis
+      .getClient()
+      .setex(cacheKey, AUTH_CACHE_TTL.policy, JSON.stringify(policy));
   }
 
   /**
@@ -221,7 +219,9 @@ export class PolicyService {
     const ownerTypeKey = ownerType === ApiKeyOwnerType.USER ? 'user' : 'org';
     const cacheKey = AUTH_CACHE_KEYS.policy(ownerTypeKey, ownerId);
     await this.redis.getClient().del(cacheKey);
-    this.logger.debug(`Invalidated policy cache for ${ownerTypeKey}:${ownerId}`);
+    this.logger.debug(
+      `Invalidated policy cache for ${ownerTypeKey}:${ownerId}`,
+    );
   }
 
   /**

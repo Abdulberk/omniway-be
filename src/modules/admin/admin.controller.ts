@@ -7,12 +7,15 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminGuard, AdminRequest } from './guards/admin.guard';
+import { AdminRateLimitGuard } from './guards/admin-rate-limit.guard';
 import {
   CreatePlanDto,
   UpdatePlanDto,
@@ -61,9 +64,9 @@ interface GetUsageQuery {
 }
 
 @Controller('admin')
-@UseGuards(AdminGuard)
+@UseGuards(AdminGuard, AdminRateLimitGuard)
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(private readonly adminService: AdminService) { }
 
   // ==================== PLAN MANAGEMENT ====================
 
@@ -147,7 +150,12 @@ export class AdminController {
   async getUsers(@Query() query: GetUsersQuery) {
     return this.adminService.getUsers({
       ...query,
-      isActive: query.isActive === 'true' ? true : query.isActive === 'false' ? false : undefined,
+      isActive:
+        query.isActive === 'true'
+          ? true
+          : query.isActive === 'false'
+            ? false
+            : undefined,
     });
   }
 
@@ -165,9 +173,12 @@ export class AdminController {
   async adjustUserWallet(
     @Param('id') id: string,
     @Body() dto: WalletAdjustmentDto,
-    @Query('_req') req: AdminRequest,
+    @Req() req: AdminRequest,
   ) {
-    const adminId = req?.adminUser?.id || 'system';
+    if (!req.adminUser?.id) {
+      throw new UnauthorizedException('Admin authentication required');
+    }
+    const adminId = req.adminUser.id;
     return this.adminService.adjustUserWallet(id, dto, adminId);
   }
 
@@ -192,9 +203,12 @@ export class AdminController {
   async adjustOrgWallet(
     @Param('id') id: string,
     @Body() dto: WalletAdjustmentDto,
-    @Query('_req') req: AdminRequest,
+    @Req() req: AdminRequest,
   ) {
-    const adminId = req?.adminUser?.id || 'system';
+    if (!req.adminUser?.id) {
+      throw new UnauthorizedException('Admin authentication required');
+    }
+    const adminId = req.adminUser.id;
     return this.adminService.adjustOrgWallet(id, dto, adminId);
   }
 
@@ -204,7 +218,12 @@ export class AdminController {
   async getApiKeys(@Query() query: GetApiKeysQuery) {
     return this.adminService.getApiKeys({
       ...query,
-      isActive: query.isActive === 'true' ? true : query.isActive === 'false' ? false : undefined,
+      isActive:
+        query.isActive === 'true'
+          ? true
+          : query.isActive === 'false'
+            ? false
+            : undefined,
     });
   }
 
@@ -213,9 +232,12 @@ export class AdminController {
   async revokeApiKey(
     @Param('id') id: string,
     @Body() body: { reason?: string },
-    @Query('_req') req: AdminRequest,
+    @Req() req: AdminRequest,
   ) {
-    const adminId = req?.adminUser?.id || 'system';
+    if (!req.adminUser?.id) {
+      throw new UnauthorizedException('Admin authentication required');
+    }
+    const adminId = req.adminUser.id;
     await this.adminService.revokeApiKey(id, adminId, body.reason);
   }
 

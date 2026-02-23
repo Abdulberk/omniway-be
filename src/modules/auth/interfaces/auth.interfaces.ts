@@ -8,23 +8,23 @@ export interface AuthContext {
   // API Key info
   apiKeyId: string;
   keyPrefix: string;
-  
+
   // Owner info (user or org)
   ownerType: ApiKeyOwnerType;
   ownerId: string;
-  
+
   // For PROJECT keys, includes the org context
   organizationId?: string;
   projectId?: string;
-  
+
   // User info (for USER keys or org member context)
   userId?: string;
-  
+
   // Key permissions
   scopes: string[];
   allowedModels: string[];
   allowedIps: string[];
-  
+
   // Resolved policy (from plan)
   policy: ResolvedPolicy;
 }
@@ -37,35 +37,35 @@ export interface ResolvedPolicy {
   // Plan identification
   planId: string;
   planSlug: string;
-  
+
   // Rate limits (requests)
   limitPerMinute: number;
   limitPerHour: number;
   limitPerDay: number;
-  
+
   // Daily allowance (requests granted per day)
   dailyAllowance: number;
-  
+
   // Concurrency
   maxConcurrent: number;
-  
+
   // Request constraints
   maxInputTokens: number;
   maxOutputTokens: number;
   maxBodyBytes: number;
-  
+
   // Model access
   allowedModels: string[];
-  
+
   // Feature flags
   hasWalletAccess: boolean;
   hasStreaming: boolean;
   hasPriorityQueue: boolean;
-  
+
   // Subscription status
   subscriptionStatus: string;
   subscriptionEndsAt: Date | null;
-  
+
   // Wallet info (if applicable)
   walletEnabled: boolean;
   walletLocked: boolean;
@@ -97,10 +97,11 @@ export interface ApiKeyValidation {
 export const AUTH_CACHE_KEYS = {
   // API key lookup by hash
   apiKeyByHash: (hash: string) => `auth:key:${hash}`,
-  
+
   // Policy by owner
-  policy: (ownerType: string, ownerId: string) => `policy:${ownerType}:${ownerId}`,
-  
+  policy: (ownerType: string, ownerId: string) =>
+    `policy:${ownerType}:${ownerId}`,
+
   // Key invalidation
   invalidatedKey: (keyId: string) => `auth:invalidated:${keyId}`,
 } as const;

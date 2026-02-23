@@ -6,18 +6,18 @@ export interface ModelInfo {
   provider: string;
   upstreamModelId: string;
   displayName: string;
-  
+
   // Capabilities
   supportsStreaming: boolean;
   supportsVision: boolean;
   supportsToolCalls: boolean;
   supportsFunctionCall: boolean;
   supportsJson: boolean;
-  
+
   // Limits
   maxContextTokens: number;
   maxOutputTokens: number;
-  
+
   // Status
   isActive: boolean;
   isDeprecated: boolean;
@@ -104,7 +104,13 @@ export interface ChatCompletionResponse {
       function_call?: object;
       tool_calls?: object[];
     };
-    finish_reason: 'stop' | 'length' | 'function_call' | 'tool_calls' | 'content_filter' | null;
+    finish_reason:
+      | 'stop'
+      | 'length'
+      | 'function_call'
+      | 'tool_calls'
+      | 'content_filter'
+      | null;
   }>;
   usage?: {
     prompt_tokens: number;
@@ -141,7 +147,13 @@ export interface RequestEventData {
   model: string;
   provider: string;
   endpoint: string;
-  status: 'SUCCESS' | 'CLIENT_ERROR' | 'UPSTREAM_ERROR' | 'TIMEOUT' | 'RATE_LIMITED' | 'BILLING_BLOCKED';
+  status:
+    | 'SUCCESS'
+    | 'CLIENT_ERROR'
+    | 'UPSTREAM_ERROR'
+    | 'TIMEOUT'
+    | 'RATE_LIMITED'
+    | 'BILLING_BLOCKED';
   statusCode: number;
   errorType?: string;
   errorMessage?: string;

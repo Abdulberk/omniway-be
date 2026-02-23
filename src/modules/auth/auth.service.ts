@@ -14,7 +14,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly apiKeyService: ApiKeyService,
     private readonly policyService: PolicyService,
-  ) {}
+  ) { }
 
   /**
    * Authenticate a request and build the auth context
@@ -81,7 +81,9 @@ export class AuthService {
    * Resolve owner context from API key
    */
   private async resolveOwnerContext(
-    apiKey: NonNullable<Awaited<ReturnType<ApiKeyService['validateApiKey']>>['apiKey']>,
+    apiKey: NonNullable<
+      Awaited<ReturnType<ApiKeyService['validateApiKey']>>['apiKey']
+    >,
   ): Promise<{
     ownerType: ApiKeyOwnerType;
     ownerId: string;
@@ -119,24 +121,24 @@ export class AuthService {
 
   /**
    * Get client IP from request
+   *
+   * SECURITY: Only trusts proxy headers when Fastify's trustProxy is configured.
+   * When trustProxy is enabled, request.ip already contains the correct client IP
+   * from the trusted proxy chain. We use request.ip as the primary source.
+   *
+   * The X-Forwarded-For header is NOT blindly trusted to prevent IP spoofing
+   * attacks that could bypass IP allowlists.
    */
   private getClientIp(request: FastifyRequest): string {
-    // Check X-Forwarded-For header (common for proxies/load balancers)
-    const xForwardedFor = request.headers['x-forwarded-for'];
-    if (xForwardedFor) {
-      const ips = Array.isArray(xForwardedFor)
-        ? xForwardedFor[0]
-        : xForwardedFor.split(',')[0];
-      return ips.trim();
-    }
-
-    // Check X-Real-IP header
-    const xRealIp = request.headers['x-real-ip'];
-    if (xRealIp) {
-      return Array.isArray(xRealIp) ? xRealIp[0] : xRealIp;
-    }
-
-    // Fall back to direct connection IP
+    // Fastify's request.ip respects the trustProxy configuration.
+    // When trustProxy is enabled (see main.ts), it reads X-Forwarded-For
+    // from the trusted proxy and returns the real client IP.
+    // When trustProxy is disabled, it returns the direct connection IP.
+    //
+    // This is safer than manually parsing X-Forwarded-For because:
+    // 1. Fastify validates the proxy chain
+    // 2. Prevents IP spoofing via forged X-Forwarded-For headers
+    // 3. Only trusts headers from known proxy addresses
     return request.ip;
   }
 

@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Inject,
-  OnModuleDestroy,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, Inject, OnModuleDestroy, Logger } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 
 @Injectable()
@@ -179,7 +174,11 @@ export class RedisService implements OnModuleDestroy {
   /**
    * Set a key with optional TTL
    */
-  async set(key: string, value: string | number, ttlSeconds?: number): Promise<void> {
+  async set(
+    key: string,
+    value: string | number,
+    ttlSeconds?: number,
+  ): Promise<void> {
     if (ttlSeconds) {
       await this.redis.set(key, String(value), 'EX', ttlSeconds);
     } else {

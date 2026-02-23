@@ -33,10 +33,7 @@ export class RateLimitService {
 
   private loadScript(filename: string): string {
     try {
-      return readFileSync(
-        join(__dirname, 'lua', filename),
-        'utf-8',
-      );
+      return readFileSync(join(__dirname, 'lua', filename), 'utf-8');
     } catch (error) {
       this.logger.error(`Failed to load Lua script: ${filename}`, error);
       throw error;
@@ -64,7 +61,14 @@ export class RateLimitService {
         [limitPerMinute, limitPerHour, limitPerDay, now],
       );
 
-      const [allowed, minuteRemaining, hourRemaining, dayRemaining, resetAt, limitedBy] = result;
+      const [
+        allowed,
+        minuteRemaining,
+        hourRemaining,
+        dayRemaining,
+        resetAt,
+        limitedBy,
+      ] = result;
 
       return {
         allowed: allowed === 1,
@@ -143,7 +147,11 @@ export class RateLimitService {
         [maxConcurrent, requestId, 300, 'release'],
       );
     } catch (error) {
-      this.logger.error('Concurrency release failed', { error, ownerKey, requestId });
+      this.logger.error('Concurrency release failed', {
+        error,
+        ownerKey,
+        requestId,
+      });
       // Non-critical - slot will auto-expire
     }
   }

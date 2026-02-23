@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { AccountService } from './account.service';
 import { UserGuard, UserRequest } from './guards/user.guard';
+import { UserRateLimitGuard } from './guards/user-rate-limit.guard';
 import {
   UpdateProfileDto,
   CreateApiKeyDto,
@@ -27,9 +28,9 @@ import {
 } from './interfaces/account.interfaces';
 
 @Controller('me')
-@UseGuards(UserGuard)
+@UseGuards(UserGuard, UserRateLimitGuard)
 export class AccountController {
-  constructor(private readonly accountService: AccountService) {}
+  constructor(private readonly accountService: AccountService) { }
 
   // ==================== PROFILE ====================
 
@@ -77,7 +78,10 @@ export class AccountController {
   }
 
   @Get('usage/history')
-  async getRequestHistory(@Req() req: UserRequest, @Query() query: UsageHistoryQuery) {
+  async getRequestHistory(
+    @Req() req: UserRequest,
+    @Query() query: UsageHistoryQuery,
+  ) {
     return this.accountService.getRequestHistory(req.user!.id, query);
   }
 
@@ -89,7 +93,10 @@ export class AccountController {
   }
 
   @Get('wallet/ledger')
-  async getWalletLedger(@Req() req: UserRequest, @Query() query: WalletLedgerQuery) {
+  async getWalletLedger(
+    @Req() req: UserRequest,
+    @Query() query: WalletLedgerQuery,
+  ) {
     return this.accountService.getWalletLedger(req.user!.id, query);
   }
 
@@ -108,12 +115,18 @@ export class AccountController {
   }
 
   @Post('organizations')
-  async createOrganization(@Req() req: UserRequest, @Body() dto: CreateOrganizationDto) {
+  async createOrganization(
+    @Req() req: UserRequest,
+    @Body() dto: CreateOrganizationDto,
+  ) {
     return this.accountService.createOrganization(req.user!.id, dto);
   }
 
   @Get('organizations/:orgId/members')
-  async getOrganizationMembers(@Req() req: UserRequest, @Param('orgId') orgId: string) {
+  async getOrganizationMembers(
+    @Req() req: UserRequest,
+    @Param('orgId') orgId: string,
+  ) {
     return this.accountService.getOrganizationMembers(req.user!.id, orgId);
   }
 
@@ -133,7 +146,12 @@ export class AccountController {
     @Param('userId') targetUserId: string,
     @Body() dto: UpdateMemberRoleDto,
   ) {
-    await this.accountService.updateMemberRole(req.user!.id, orgId, targetUserId, dto);
+    await this.accountService.updateMemberRole(
+      req.user!.id,
+      orgId,
+      targetUserId,
+      dto,
+    );
     return { success: true };
   }
 

@@ -9,11 +9,13 @@ import { AuthContext } from '../../modules/auth/interfaces/auth.interfaces';
 export const GetAuthContext = createParamDecorator(
   (data: unknown, ctx: ExecutionContext): AuthContext => {
     const request = ctx.switchToHttp().getRequest<FastifyRequest>();
-    
+
     if (!request.authContext) {
-      throw new Error('AuthContext not found on request. Is AuthGuard applied?');
+      throw new Error(
+        'AuthContext not found on request. Is AuthGuard applied?',
+      );
     }
-    
+
     return request.authContext;
   },
 );

@@ -30,7 +30,7 @@ export class ProxyService {
     private readonly modelService: ModelService,
     private readonly circuitBreaker: CircuitBreakerService,
     private readonly config: ConfigService,
-  ) { }
+  ) {}
 
   /**
    * Proxy a chat completion request
@@ -288,7 +288,7 @@ export class ProxyService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${provider.apiKey}`,
+          Authorization: `Bearer ${provider.apiKey}`,
           'X-Request-ID': requestId,
         },
         body: JSON.stringify(request),
@@ -332,7 +332,10 @@ export class ProxyService {
     const url = `${provider.baseUrl}/v1/chat/completions`;
 
     const controller = new AbortController();
-    const maxDuration = this.config.get<number>('STREAM_MAX_DURATION_MS', 300000);
+    const maxDuration = this.config.get<number>(
+      'STREAM_MAX_DURATION_MS',
+      300000,
+    );
 
     const timeout = setTimeout(() => {
       controller.abort();
@@ -343,9 +346,9 @@ export class ProxyService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${provider.apiKey}`,
+          Authorization: `Bearer ${provider.apiKey}`,
           'X-Request-ID': requestId,
-          'Accept': 'text/event-stream',
+          Accept: 'text/event-stream',
         },
         body: JSON.stringify(request),
         signal: controller.signal,
@@ -388,12 +391,14 @@ export class ProxyService {
             }
           } catch (error) {
             clearTimeout(timeout);
-            this.destroy(error instanceof Error ? error : new Error(String(error)));
+            this.destroy(
+              error instanceof Error ? error : new Error(String(error)),
+            );
           }
         },
         destroy(err, callback) {
           clearTimeout(timeout);
-          reader.cancel().catch(() => { });
+          reader.cancel().catch(() => {});
           callback(err);
         },
       });
@@ -408,17 +413,20 @@ export class ProxyService {
           if (metrics.status === 'COMPLETED') {
             this.logger.debug(
               `Stream completed for ${requestId}: ` +
-              `status=${metrics.status}, chunks=${metrics.chunkCount}, bytes=${metrics.outputBytes}`,
+                `status=${metrics.status}, chunks=${metrics.chunkCount}, bytes=${metrics.outputBytes}`,
             );
             // Record success for circuit breaker
-            this.circuitBreaker.recordSuccess(model.provider).catch(() => { });
-          } else if (metrics.status === 'UPSTREAM_ERROR' || metrics.status === 'TIMEOUT') {
+            this.circuitBreaker.recordSuccess(model.provider).catch(() => {});
+          } else if (
+            metrics.status === 'UPSTREAM_ERROR' ||
+            metrics.status === 'TIMEOUT'
+          ) {
             this.logger.warn(
               `Stream error for ${requestId}: ${metrics.errorMessage}, ` +
-              `status=${metrics.status}, ttfb=${metrics.ttfbMs}`,
+                `status=${metrics.status}, ttfb=${metrics.ttfbMs}`,
             );
             // Record failure for circuit breaker
-            this.circuitBreaker.recordFailure(model.provider).catch(() => { });
+            this.circuitBreaker.recordFailure(model.provider).catch(() => {});
           }
         },
         onError: (error: Error) => {

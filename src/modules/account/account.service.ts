@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
 import { ApiKeyService } from '../auth/api-key.service';
@@ -26,7 +32,12 @@ import {
   UpdateNotificationPreferencesDto,
   PaginatedResponse,
 } from './interfaces/account.interfaces';
-import { Prisma, MembershipRole, AuditAction, ApiKeyOwnerType } from '@prisma/client';
+import {
+  Prisma,
+  MembershipRole,
+  AuditAction,
+  ApiKeyOwnerType,
+} from '@prisma/client';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -95,7 +106,10 @@ export class AccountService {
     };
   }
 
-  async updateProfile(userId: string, dto: UpdateProfileDto): Promise<UserProfileResponse> {
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+  ): Promise<UserProfileResponse> {
     await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -132,7 +146,10 @@ export class AccountService {
     }));
   }
 
-  async createUserApiKey(userId: string, dto: CreateApiKeyDto): Promise<ApiKeyCreatedResponse> {
+  async createUserApiKey(
+    userId: string,
+    dto: CreateApiKeyDto,
+  ): Promise<ApiKeyCreatedResponse> {
     // Generate key
     const keyPlain = `omni_${crypto.randomBytes(32).toString('hex')}`;
     const keyPrefix = keyPlain.substring(0, 12);
@@ -223,7 +240,11 @@ export class AccountService {
 
   // ==================== USAGE ====================
 
-  async getUsageSummary(userId: string, startDate?: Date, endDate?: Date): Promise<UsageSummaryResponse> {
+  async getUsageSummary(
+    userId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<UsageSummaryResponse> {
     const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate || new Date();
 
@@ -587,19 +608,25 @@ export class AccountService {
             seatCount: m.organization.subscription.seatCount,
           }
         : null,
-      walletBalance: m.organization.walletBalance?.balanceCents.toString() || '0',
+      walletBalance:
+        m.organization.walletBalance?.balanceCents.toString() || '0',
       memberCount: m.organization._count.memberships,
     }));
   }
 
-  async createOrganization(userId: string, dto: CreateOrganizationDto): Promise<OrganizationResponse> {
+  async createOrganization(
+    userId: string,
+    dto: CreateOrganizationDto,
+  ): Promise<OrganizationResponse> {
     // Check for duplicate slug
     const existing = await this.prisma.organization.findUnique({
       where: { slug: dto.slug },
     });
 
     if (existing) {
-      throw new ConflictException(`Organization with slug "${dto.slug}" already exists`);
+      throw new ConflictException(
+        `Organization with slug "${dto.slug}" already exists`,
+      );
     }
 
     const org = await this.prisma.$transaction(async (tx) => {
@@ -641,7 +668,10 @@ export class AccountService {
     return orgs.find((o) => o.id === org.id)!;
   }
 
-  async getOrganizationMembers(userId: string, orgId: string): Promise<OrganizationMemberResponse[]> {
+  async getOrganizationMembers(
+    userId: string,
+    orgId: string,
+  ): Promise<OrganizationMemberResponse[]> {
     // Verify user has access
     const membership = await this.prisma.membership.findUnique({
       where: { userId_organizationId: { userId, organizationId: orgId } },
@@ -667,14 +697,20 @@ export class AccountService {
     }));
   }
 
-  async inviteMember(userId: string, orgId: string, dto: InviteMemberDto): Promise<{ invitationId: string; token: string }> {
+  async inviteMember(
+    userId: string,
+    orgId: string,
+    dto: InviteMemberDto,
+  ): Promise<{ invitationId: string; token: string }> {
     // Verify user has permission (OWNER or ADMIN)
     const membership = await this.prisma.membership.findUnique({
       where: { userId_organizationId: { userId, organizationId: orgId } },
     });
 
     if (!membership || !['OWNER', 'ADMIN'].includes(membership.role)) {
-      throw new ForbiddenException('You do not have permission to invite members');
+      throw new ForbiddenException(
+        'You do not have permission to invite members',
+      );
     }
 
     // Check if user is already a member
@@ -684,11 +720,18 @@ export class AccountService {
 
     if (existingUser) {
       const existingMembership = await this.prisma.membership.findUnique({
-        where: { userId_organizationId: { userId: existingUser.id, organizationId: orgId } },
+        where: {
+          userId_organizationId: {
+            userId: existingUser.id,
+            organizationId: orgId,
+          },
+        },
       });
 
       if (existingMembership) {
-        throw new ConflictException('User is already a member of this organization');
+        throw new ConflictException(
+          'User is already a member of this organization',
+        );
       }
     }
 
@@ -730,14 +773,21 @@ export class AccountService {
     return { invitationId: invitation.id, token };
   }
 
-  async updateMemberRole(userId: string, orgId: string, targetUserId: string, dto: UpdateMemberRoleDto): Promise<void> {
+  async updateMemberRole(
+    userId: string,
+    orgId: string,
+    targetUserId: string,
+    dto: UpdateMemberRoleDto,
+  ): Promise<void> {
     // Verify user has permission (OWNER only for role changes)
     const membership = await this.prisma.membership.findUnique({
       where: { userId_organizationId: { userId, organizationId: orgId } },
     });
 
     if (!membership || membership.role !== 'OWNER') {
-      throw new ForbiddenException('Only organization owners can change member roles');
+      throw new ForbiddenException(
+        'Only organization owners can change member roles',
+      );
     }
 
     // Cannot change own role
@@ -746,7 +796,9 @@ export class AccountService {
     }
 
     const targetMembership = await this.prisma.membership.findUnique({
-      where: { userId_organizationId: { userId: targetUserId, organizationId: orgId } },
+      where: {
+        userId_organizationId: { userId: targetUserId, organizationId: orgId },
+      },
     });
 
     if (!targetMembership) {
@@ -755,7 +807,12 @@ export class AccountService {
 
     await this.prisma.$transaction([
       this.prisma.membership.update({
-        where: { userId_organizationId: { userId: targetUserId, organizationId: orgId } },
+        where: {
+          userId_organizationId: {
+            userId: targetUserId,
+            organizationId: orgId,
+          },
+        },
         data: { role: dto.role },
       }),
       this.prisma.auditLog.create({
@@ -771,7 +828,11 @@ export class AccountService {
     ]);
   }
 
-  async removeMember(userId: string, orgId: string, targetUserId: string): Promise<void> {
+  async removeMember(
+    userId: string,
+    orgId: string,
+    targetUserId: string,
+  ): Promise<void> {
     // Verify user has permission (OWNER or ADMIN, or removing self)
     const membership = await this.prisma.membership.findUnique({
       where: { userId_organizationId: { userId, organizationId: orgId } },
@@ -785,11 +846,15 @@ export class AccountService {
     const hasPermission = ['OWNER', 'ADMIN'].includes(membership.role);
 
     if (!isSelf && !hasPermission) {
-      throw new ForbiddenException('You do not have permission to remove members');
+      throw new ForbiddenException(
+        'You do not have permission to remove members',
+      );
     }
 
     const targetMembership = await this.prisma.membership.findUnique({
-      where: { userId_organizationId: { userId: targetUserId, organizationId: orgId } },
+      where: {
+        userId_organizationId: { userId: targetUserId, organizationId: orgId },
+      },
     });
 
     if (!targetMembership) {
@@ -803,7 +868,12 @@ export class AccountService {
 
     await this.prisma.$transaction([
       this.prisma.membership.delete({
-        where: { userId_organizationId: { userId: targetUserId, organizationId: orgId } },
+        where: {
+          userId_organizationId: {
+            userId: targetUserId,
+            organizationId: orgId,
+          },
+        },
       }),
       this.prisma.auditLog.create({
         data: {
@@ -820,7 +890,10 @@ export class AccountService {
 
   // ==================== PROJECTS ====================
 
-  async getOrgProjects(userId: string, orgId: string): Promise<ProjectResponse[]> {
+  async getOrgProjects(
+    userId: string,
+    orgId: string,
+  ): Promise<ProjectResponse[]> {
     // Verify user has access
     const membership = await this.prisma.membership.findUnique({
       where: { userId_organizationId: { userId, organizationId: orgId } },
@@ -847,14 +920,20 @@ export class AccountService {
     }));
   }
 
-  async createProject(userId: string, orgId: string, dto: CreateProjectDto): Promise<ProjectResponse> {
+  async createProject(
+    userId: string,
+    orgId: string,
+    dto: CreateProjectDto,
+  ): Promise<ProjectResponse> {
     // Verify user has permission (OWNER or ADMIN)
     const membership = await this.prisma.membership.findUnique({
       where: { userId_organizationId: { userId, organizationId: orgId } },
     });
 
     if (!membership || !['OWNER', 'ADMIN'].includes(membership.role)) {
-      throw new ForbiddenException('You do not have permission to create projects');
+      throw new ForbiddenException(
+        'You do not have permission to create projects',
+      );
     }
 
     // Check for duplicate slug within org
@@ -863,7 +942,9 @@ export class AccountService {
     });
 
     if (existing) {
-      throw new ConflictException(`Project with slug "${dto.slug}" already exists in this organization`);
+      throw new ConflictException(
+        `Project with slug "${dto.slug}" already exists in this organization`,
+      );
     }
 
     const project = await this.prisma.project.create({
@@ -901,7 +982,9 @@ export class AccountService {
 
   // ==================== NOTIFICATION PREFERENCES ====================
 
-  async getNotificationPreferences(userId: string): Promise<NotificationPreferencesResponse> {
+  async getNotificationPreferences(
+    userId: string,
+  ): Promise<NotificationPreferencesResponse> {
     let prefs = await this.prisma.notificationPreference.findUnique({
       where: { userId },
     });

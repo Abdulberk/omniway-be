@@ -28,4 +28,4 @@ import { BillingGuard } from './guards/billing.guard';
     BillingGuard,
   ],
 })
-export class BillingModule { }
+export class BillingModule {}

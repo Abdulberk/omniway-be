@@ -2,7 +2,11 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
-import { ModelInfo, ProviderConfig, ModelsListResponse } from './interfaces/gateway.interfaces';
+import {
+  ModelInfo,
+  ProviderConfig,
+  ModelsListResponse,
+} from './interfaces/gateway.interfaces';
 
 const MODEL_CACHE_TTL = 300; // 5 minutes
 
@@ -24,26 +28,41 @@ export class ModelService {
    */
   private initializeProviders(): void {
     const upstreamApiKey = this.config.get<string>('UPSTREAM_API_KEY', '');
-    const connectTimeout = this.config.get<number>('UPSTREAM_CONNECT_TIMEOUT_MS', 5000);
-    const readTimeout = this.config.get<number>('UPSTREAM_READ_TIMEOUT_MS', 120000);
+    const connectTimeout = this.config.get<number>(
+      'UPSTREAM_CONNECT_TIMEOUT_MS',
+      5000,
+    );
+    const readTimeout = this.config.get<number>(
+      'UPSTREAM_READ_TIMEOUT_MS',
+      120000,
+    );
 
     this.providerConfigs.set('openai', {
       name: 'openai',
-      baseUrl: this.config.get<string>('UPSTREAM_OPENAI_URL', 'https://api.o7.team/openai'),
+      baseUrl: this.config.get<string>(
+        'UPSTREAM_OPENAI_URL',
+        'https://api.o7.team/openai',
+      ),
       apiKey: upstreamApiKey,
       timeout: { connect: connectTimeout, read: readTimeout },
     });
 
     this.providerConfigs.set('anthropic', {
       name: 'anthropic',
-      baseUrl: this.config.get<string>('UPSTREAM_ANTHROPIC_URL', 'https://api.o7.team/anthropic'),
+      baseUrl: this.config.get<string>(
+        'UPSTREAM_ANTHROPIC_URL',
+        'https://api.o7.team/anthropic',
+      ),
       apiKey: upstreamApiKey,
       timeout: { connect: connectTimeout, read: readTimeout },
     });
 
     this.providerConfigs.set('google', {
       name: 'google',
-      baseUrl: this.config.get<string>('UPSTREAM_OPENAI_COMPATIBLE_URL', 'https://api.o7.team/openai-compatible'),
+      baseUrl: this.config.get<string>(
+        'UPSTREAM_OPENAI_COMPATIBLE_URL',
+        'https://api.o7.team/openai-compatible',
+      ),
       apiKey: upstreamApiKey,
       timeout: { connect: connectTimeout, read: readTimeout },
     });
@@ -100,11 +119,9 @@ export class ModelService {
     };
 
     // Cache it
-    await this.redis.getClient().setex(
-      cacheKey,
-      MODEL_CACHE_TTL,
-      JSON.stringify(modelInfo),
-    );
+    await this.redis
+      .getClient()
+      .setex(cacheKey, MODEL_CACHE_TTL, JSON.stringify(modelInfo));
 
     return modelInfo;
   }

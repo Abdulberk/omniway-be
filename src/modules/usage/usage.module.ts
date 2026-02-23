@@ -8,11 +8,11 @@ import { USAGE_QUEUES } from './interfaces/usage.interfaces';
 
 /**
  * Usage Module
- * 
+ *
  * Provides async usage event processing via BullMQ.
  * - UsageService: Emits events to the queue with batching
  * - UsageEventsProcessor: Processes events and persists to DB
- * 
+ *
  * Global module - available throughout the application.
  */
 @Global()
@@ -20,7 +20,7 @@ import { USAGE_QUEUES } from './interfaces/usage.interfaces';
   imports: [
     ConfigModule,
     PrismaModule,
-    
+
     // Register BullMQ queues
     BullModule.registerQueueAsync({
       name: USAGE_QUEUES.EVENTS,
@@ -41,7 +41,7 @@ import { USAGE_QUEUES } from './interfaces/usage.interfaces';
       }),
       inject: [ConfigService],
     }),
-    
+
     BullModule.registerQueueAsync({
       name: USAGE_QUEUES.AGGREGATION,
       useFactory: (configService: ConfigService) => ({
@@ -62,10 +62,7 @@ import { USAGE_QUEUES } from './interfaces/usage.interfaces';
       inject: [ConfigService],
     }),
   ],
-  providers: [
-    UsageService,
-    UsageEventsProcessor,
-  ],
+  providers: [UsageService, UsageEventsProcessor],
   exports: [UsageService],
 })
 export class UsageModule {}

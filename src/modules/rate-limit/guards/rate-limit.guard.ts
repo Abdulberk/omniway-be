@@ -21,7 +21,9 @@ export class RateLimitGuard implements CanActivate {
     const authContext = request.authContext;
 
     if (!authContext) {
-      throw new Error('AuthContext not found. RateLimitGuard must be used after AuthGuard.');
+      throw new Error(
+        'AuthContext not found. RateLimitGuard must be used after AuthGuard.',
+      );
     }
 
     const result = await this.rateLimitService.checkRateLimit(authContext);
@@ -30,8 +32,11 @@ export class RateLimitGuard implements CanActivate {
     this.setRateLimitHeaders(response, result, authContext);
 
     if (!result.allowed) {
-      const retryAfter = Math.max(1, result.resetAt - Math.floor(Date.now() / 1000));
-      
+      const retryAfter = Math.max(
+        1,
+        result.resetAt - Math.floor(Date.now() / 1000),
+      );
+
       this.logger.warn(`Rate limit exceeded for ${authContext.keyPrefix}...`, {
         ownerType: authContext.ownerType,
         ownerId: authContext.ownerId,
@@ -64,14 +69,16 @@ export class RateLimitGuard implements CanActivate {
   ): void {
     // Use the most restrictive limit for display
     const { limitPerMinute, limitPerHour, limitPerDay } = authContext.policy;
-    
+
     // Determine which limit to show (smallest remaining)
     let limit: number;
     let remaining: number;
     let reset: number;
 
-    if (result.minuteRemaining <= result.hourRemaining && 
-        result.minuteRemaining <= result.dayRemaining) {
+    if (
+      result.minuteRemaining <= result.hourRemaining &&
+      result.minuteRemaining <= result.dayRemaining
+    ) {
       limit = limitPerMinute;
       remaining = result.minuteRemaining;
       reset = Math.floor(Date.now() / 60000) * 60 + 60;
@@ -91,10 +98,19 @@ export class RateLimitGuard implements CanActivate {
 
     // Also include detailed headers
     response.header('X-RateLimit-Limit-Minute', String(limitPerMinute));
-    response.header('X-RateLimit-Remaining-Minute', String(Math.max(0, result.minuteRemaining)));
+    response.header(
+      'X-RateLimit-Remaining-Minute',
+      String(Math.max(0, result.minuteRemaining)),
+    );
     response.header('X-RateLimit-Limit-Hour', String(limitPerHour));
-    response.header('X-RateLimit-Remaining-Hour', String(Math.max(0, result.hourRemaining)));
+    response.header(
+      'X-RateLimit-Remaining-Hour',
+      String(Math.max(0, result.hourRemaining)),
+    );
     response.header('X-RateLimit-Limit-Day', String(limitPerDay));
-    response.header('X-RateLimit-Remaining-Day', String(Math.max(0, result.dayRemaining)));
+    response.header(
+      'X-RateLimit-Remaining-Day',
+      String(Math.max(0, result.dayRemaining)),
+    );
   }
 }

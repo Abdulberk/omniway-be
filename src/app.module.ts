@@ -20,62 +20,62 @@ import { RequestIdInterceptor } from './common/interceptors/request-id.intercept
 import { configValidationSchema } from './config/config.validation';
 
 @Module({
-    imports: [
-        // Configuration
-        ConfigModule.forRoot({
-            isGlobal: true,
-            validationSchema: configValidationSchema,
-            validationOptions: {
-                abortEarly: true,
-            },
-            envFilePath: ['.env.local', '.env'],
-        }),
+  imports: [
+    // Configuration
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: configValidationSchema,
+      validationOptions: {
+        abortEarly: true,
+      },
+      envFilePath: ['.env.local', '.env'],
+    }),
 
-        // BullMQ global configuration
-        BullModule.forRootAsync({
-            imports: [ConfigModule],
-            useFactory: (configService: ConfigService) => ({
-                connection: {
-                    host: configService.get<string>('REDIS_HOST', 'localhost'),
-                    port: configService.get<number>('REDIS_PORT', 6379),
-                    password: configService.get<string>('REDIS_PASSWORD'),
-                    db: configService.get<number>('REDIS_DB', 0),
-                },
-            }),
-            inject: [ConfigService],
-        }),
+    // BullMQ global configuration
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+          password: configService.get<string>('REDIS_PASSWORD'),
+          db: configService.get<number>('REDIS_DB', 0),
+        },
+      }),
+      inject: [ConfigService],
+    }),
 
-        // Core modules
-        PrismaModule,
-        RedisModule,
-        CommonModule,
+    // Core modules
+    PrismaModule,
+    RedisModule,
+    CommonModule,
 
-        // Feature modules
-        HealthModule,
-        AuthModule,
-        RateLimitModule,
-        BillingModule,
-        UsageModule,
-        StripeModule,
-        AdminModule,
-        AccountModule,
-        GatewayModule,
-    ],
-    providers: [
-        // Global exception filter
-        {
-            provide: APP_FILTER,
-            useClass: AllExceptionsFilter,
-        },
-        // Global interceptors
-        {
-            provide: APP_INTERCEPTOR,
-            useClass: RequestIdInterceptor,
-        },
-        {
-            provide: APP_INTERCEPTOR,
-            useClass: LoggingInterceptor,
-        },
-    ],
+    // Feature modules
+    HealthModule,
+    AuthModule,
+    RateLimitModule,
+    BillingModule,
+    UsageModule,
+    StripeModule,
+    AdminModule,
+    AccountModule,
+    GatewayModule,
+  ],
+  providers: [
+    // Global exception filter
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+    // Global interceptors
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RequestIdInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
+    },
+  ],
 })
-export class AppModule { }
+export class AppModule {}

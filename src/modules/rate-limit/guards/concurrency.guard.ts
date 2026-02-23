@@ -21,7 +21,9 @@ export class ConcurrencyGuard implements CanActivate {
     const authContext = request.authContext;
 
     if (!authContext) {
-      throw new Error('AuthContext not found. ConcurrencyGuard must be used after AuthGuard.');
+      throw new Error(
+        'AuthContext not found. ConcurrencyGuard must be used after AuthGuard.',
+      );
     }
 
     const requestId = (request.headers['x-request-id'] as string) || request.id;
@@ -36,12 +38,15 @@ export class ConcurrencyGuard implements CanActivate {
     response.header('X-Concurrency-Current', String(result.currentCount));
 
     if (!result.allowed) {
-      this.logger.warn(`Concurrency limit exceeded for ${authContext.keyPrefix}...`, {
-        ownerType: authContext.ownerType,
-        ownerId: authContext.ownerId,
-        current: result.currentCount,
-        max: result.maxCount,
-      });
+      this.logger.warn(
+        `Concurrency limit exceeded for ${authContext.keyPrefix}...`,
+        {
+          ownerType: authContext.ownerType,
+          ownerId: authContext.ownerId,
+          current: result.currentCount,
+          max: result.maxCount,
+        },
+      );
 
       throw new HttpException(
         {

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { FastifyRequest } from 'fastify';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { JwtService, JwtPayload } from '../../auth/jwt.service';
 
 /**
  * Extended request interface for user routes
@@ -22,14 +23,16 @@ export interface UserRequest extends FastifyRequest {
 
 /**
  * Guard for authenticated user routes
- * Requires JWT/session authentication
- * 
- * For MVP, we check a simple Authorization header with user ID
- * In production, replace with proper JWT validation
+ * Requires JWT authentication with valid signature and claims
+ *
+ * SECURITY: Validates JWT signature and claims before granting access
  */
 @Injectable()
 export class UserGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) { }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<UserRequest>();
@@ -39,17 +42,27 @@ export class UserGuard implements CanActivate {
       throw new UnauthorizedException('Authorization header is required');
     }
 
-    // For MVP: Bearer <user_id> format
-    // In production: Replace with JWT validation
     const [bearer, token] = authHeader.split(' ');
-    
+
     if (bearer?.toLowerCase() !== 'bearer' || !token) {
       throw new UnauthorizedException('Invalid authorization format');
     }
 
-    // Check if this is a valid user
+    // Verify JWT token and extract payload
+    let payload: JwtPayload;
+    try {
+      payload = this.jwtService.verify(token);
+    } catch (err) {
+      throw new UnauthorizedException(
+        err instanceof UnauthorizedException
+          ? err.message
+          : 'Invalid or expired token',
+      );
+    }
+
+    // Fetch user from database to ensure they still exist and are active
     const user = await this.prisma.user.findUnique({
-      where: { id: token },
+      where: { id: payload.sub },
       select: {
         id: true,
         email: true,
