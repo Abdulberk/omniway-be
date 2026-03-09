@@ -18,6 +18,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { RequestIdInterceptor } from './common/interceptors/request-id.interceptor';
 import { configValidationSchema } from './config/config.validation';
+import { getRedisConnectionOptions } from './redis/redis-connection.util';
 
 @Module({
   imports: [
@@ -35,12 +36,7 @@ import { configValidationSchema } from './config/config.validation';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        connection: {
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
-          password: configService.get<string>('REDIS_PASSWORD'),
-          db: configService.get<number>('REDIS_DB', 0),
-        },
+        connection: getRedisConnectionOptions(configService),
       }),
       inject: [ConfigService],
     }),

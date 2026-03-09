@@ -9,7 +9,11 @@ import {
 import { FastifyRequest } from 'fastify';
 import { BillingService } from '../billing.service';
 import { AuthContext } from '../../auth/interfaces/auth.interfaces';
-import { toBillingOwnerType } from '../interfaces/billing.interfaces';
+import { RedisService } from '../../../redis/redis.service';
+import {
+  BILLING_KEYS,
+  toBillingOwnerType,
+} from '../interfaces/billing.interfaces';
 
 /**
  * Billing result attached to request
@@ -29,6 +33,7 @@ export interface RequestWithBilling extends FastifyRequest {
   _requestId: string;
   _model?: string;
   billingResult?: BillingResultInfo;
+  cachedResponse?: unknown;
 }
 
 /**
@@ -41,7 +46,10 @@ export interface RequestWithBilling extends FastifyRequest {
 export class BillingGuard implements CanActivate {
   private readonly logger = new Logger(BillingGuard.name);
 
-  constructor(private readonly billingService: BillingService) {}
+  constructor(
+    private readonly billingService: BillingService,
+    private readonly redis: RedisService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<
@@ -136,7 +144,47 @@ export class BillingGuard implements CanActivate {
             );
           }
 
-          // For non-streaming, attach billing info (will try to serve cached response)
+          const cacheKey = BILLING_KEYS.responseCache(
+            toBillingOwnerType(authContext.ownerType),
+            authContext.ownerId,
+            requestId,
+          );
+          const cachedResponse = await this.redis.getClient().get(cacheKey);
+
+          if (!cachedResponse) {
+            throw new HttpException(
+              {
+                error: {
+                  message:
+                    'Request already processed and no replay cache is available. Use a new Idempotency-Key for retries.',
+                  type: 'idempotency_error',
+                  code: 'idempotency_conflict',
+                  request_id: requestId,
+                },
+              },
+              HttpStatus.CONFLICT,
+            );
+          }
+
+          try {
+            (request as unknown as RequestWithBilling).cachedResponse =
+              JSON.parse(cachedResponse);
+          } catch {
+            await this.redis.getClient().del(cacheKey);
+            throw new HttpException(
+              {
+                error: {
+                  message:
+                    'Cached response is invalid. Use a new Idempotency-Key for retries.',
+                  type: 'idempotency_error',
+                  code: 'idempotency_conflict',
+                  request_id: requestId,
+                },
+              },
+              HttpStatus.CONFLICT,
+            );
+          }
+
           (request as unknown as RequestWithBilling).billingResult = {
             source: result.source as 'allowance' | 'wallet',
             chargedCents: result.chargedCents,

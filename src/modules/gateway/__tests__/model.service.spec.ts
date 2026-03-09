@@ -32,15 +32,18 @@ describe('ModelService', () => {
   };
 
   const configDefaults: Record<string, any> = {
-    'providers.openai.apiKey': 'sk-test',
-    'providers.openai.baseUrl': 'https://api.openai.com/v1',
-    'providers.anthropic.apiKey': 'sk-ant-test',
-    'providers.anthropic.baseUrl': 'https://api.anthropic.com/v1',
+    UPSTREAM_API_KEY: 'sk-test',
+    UPSTREAM_OPENAI_URL: 'https://api.openai.com/v1',
+    UPSTREAM_ANTHROPIC_URL: 'https://api.anthropic.com/v1',
+    UPSTREAM_OPENAI_COMPATIBLE_URL: 'https://generative.example.com/v1',
+    UPSTREAM_CONNECT_TIMEOUT_MS: 5000,
+    UPSTREAM_READ_TIMEOUT_MS: 120000,
   };
 
   beforeEach(async () => {
     mockRedisClient = {
       get: jest.fn(),
+      setex: jest.fn(),
       set: jest.fn(),
       del: jest.fn(),
     };
@@ -112,7 +115,7 @@ describe('ModelService', () => {
       expect(mockRedisClient.get).toHaveBeenCalledWith(
         expect.stringContaining('model:gpt-4'),
       );
-      expect(prismaService.model.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.modelCatalog.findUnique).not.toHaveBeenCalled();
     });
 
     it('should fetch from DB on cache miss and cache result', async () => {

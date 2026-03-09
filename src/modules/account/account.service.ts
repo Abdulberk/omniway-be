@@ -152,7 +152,7 @@ export class AccountService {
   ): Promise<ApiKeyCreatedResponse> {
     // Generate key
     const keyPlain = `omni_${crypto.randomBytes(32).toString('hex')}`;
-    const keyPrefix = keyPlain.substring(0, 12);
+    const keyPrefix = keyPlain.substring(0, 13);
     const keyHash = crypto.createHash('sha256').update(keyPlain).digest('hex');
 
     const key = await this.prisma.apiKey.create({
@@ -234,8 +234,7 @@ export class AccountService {
       }),
     ]);
 
-    // Remove from Redis cache
-    await this.redis.del(`apikey:${key.keyHash}`);
+    await this.apiKeyService.invalidateApiKeyCache(key.keyHash);
   }
 
   // ==================== USAGE ====================

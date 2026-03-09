@@ -11,4 +11,4 @@ import { AuthGuard } from './guards/auth.guard';
   providers: [AuthService, ApiKeyService, PolicyService, JwtService, AuthGuard],
   exports: [AuthService, ApiKeyService, PolicyService, JwtService, AuthGuard],
 })
-export class AuthModule { }
+export class AuthModule {}

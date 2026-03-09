@@ -61,6 +61,14 @@ async function bootstrap() {
 
   // Get config service
   const configService = app.get(ConfigService);
+  const corsOrigins = configService
+    .get<string>('CORS_ORIGINS', '*')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const allowAllOrigins =
+    corsOrigins.length === 0 ||
+    (corsOrigins.length === 1 && corsOrigins[0] === '*');
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -76,7 +84,7 @@ async function bootstrap() {
 
   // CORS configuration
   app.enableCors({
-    origin: configService.get<string>('CORS_ORIGINS', '*').split(','),
+    origin: allowAllOrigins ? true : corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
@@ -91,7 +99,7 @@ async function bootstrap() {
       'X-RateLimit-Reset',
       'Retry-After',
     ],
-    credentials: true,
+    credentials: !allowAllOrigins,
     maxAge: 86400,
   });
 

@@ -31,8 +31,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
-    let errorType = 'internal_error';
-    let errorCode = 'internal_error';
+    let errorType: string | undefined;
+    let errorCode: string | undefined;
+    let param: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -42,15 +43,35 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = exceptionResponse;
       } else if (typeof exceptionResponse === 'object') {
         const resp = exceptionResponse as Record<string, unknown>;
-        message = (resp.message as string) || message;
-        errorType = (resp.error as string) || this.getErrorType(status);
-        errorCode = (resp.code as string) || this.getErrorCode(status);
+
+        if (
+          typeof resp.error === 'object' &&
+          resp.error !== null &&
+          !Array.isArray(resp.error)
+        ) {
+          const nestedError = resp.error as Record<string, unknown>;
+          message =
+            (nestedError.message as string) ||
+            this.getMessageFromResponse(resp.message) ||
+            message;
+          errorType =
+            (nestedError.type as string) || (resp.type as string) || errorType;
+          errorCode =
+            (nestedError.code as string) || (resp.code as string) || errorCode;
+          param = (nestedError.param as string) || undefined;
+        } else {
+          message = this.getMessageFromResponse(resp.message) || message;
+          errorType = (resp.type as string) || errorType;
+          errorCode = (resp.code as string) || errorCode;
+        }
       }
 
-      errorType = this.getErrorType(status);
-      errorCode = this.getErrorCode(status);
+      errorType ??= this.getErrorType(status);
+      errorCode ??= this.getErrorCode(status);
     } else if (exception instanceof Error) {
       message = exception.message;
+      errorType = this.getErrorType(status);
+      errorCode = this.getErrorCode(status);
 
       // Log unexpected errors
       this.logger.error(`Unexpected error: ${message}`, exception.stack, {
@@ -62,8 +83,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const errorResponse: ErrorResponse = {
       error: {
         message,
-        type: errorType,
-        code: errorCode,
+        type: errorType || this.getErrorType(status),
+        code: errorCode || this.getErrorCode(status),
+        param,
       },
       request_id: requestId,
     };
@@ -82,6 +104,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     response.status(status).send(errorResponse);
+  }
+
+  private getMessageFromResponse(value: unknown): string | undefined {
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    if (Array.isArray(value) && value.length > 0) {
+      return value.join(', ');
+    }
+
+    return undefined;
   }
 
   private getErrorType(status: number): string {

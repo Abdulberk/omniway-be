@@ -274,10 +274,10 @@ export class RefundService {
     params: WalletRefundParams,
     _expectedBalance: bigint,
   ): Promise<void> {
-    // Use wallet service's refund method for DB write
-    // Note: The wallet service will also try to update Redis,
-    // but since we already did that in Lua, it's just an idempotent update
-    const result = await this.walletService.refund(params);
+    // Persist the refund after Lua already updated Redis.
+    const result = await this.walletService.refund(params, {
+      syncRedis: false,
+    });
 
     if (!result.success) {
       throw new Error('Wallet refund DB write returned failure');

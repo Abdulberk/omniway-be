@@ -136,6 +136,96 @@ export interface ModelsListResponse {
 }
 
 /**
+ * Anthropic-compatible message request (for /v1/messages endpoint)
+ * Used by Claude Code, Anthropic SDK
+ */
+export interface AnthropicMessageRequest {
+  model: string;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content:
+      | string
+      | Array<{
+          type: 'text' | 'image';
+          text?: string;
+          source?: {
+            type: 'base64';
+            media_type: string;
+            data: string;
+          };
+        }>;
+  }>;
+  system?: string;
+  max_tokens: number;
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  stop_sequences?: string[];
+  stream?: boolean;
+  tools?: Array<{
+    name: string;
+    description: string;
+    input_schema: object;
+  }>;
+  tool_choice?: { type: 'auto' | 'any' | 'tool'; name?: string };
+}
+
+/**
+ * Anthropic-compatible message response
+ */
+export interface AnthropicMessageResponse {
+  id: string;
+  type: 'message';
+  role: 'assistant';
+  content: Array<{
+    type: 'text' | 'tool_use';
+    text?: string;
+    id?: string;
+    name?: string;
+    input?: object;
+  }>;
+  model: string;
+  stop_reason: 'end_turn' | 'max_tokens' | 'stop_sequence' | 'tool_use';
+  stop_sequence?: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+}
+
+/**
+ * Anthropic streaming event (for SSE)
+ */
+export interface AnthropicStreamEvent {
+  type: string;
+  index?: number;
+  delta?: { type?: string; text?: string; partial_json?: string };
+  content_block?: { type: string; text?: string };
+  content_block_index?: number;
+  message?: {
+    id: string;
+    type: string;
+    role: string;
+    content: Array<{ type: string; text: string }>;
+    model: string;
+    stop_reason: string;
+    usage: { input_tokens: number; output_tokens: number };
+  };
+  usage?: { output_tokens: number };
+}
+
+/**
+ * Anthropic error response
+ */
+export interface AnthropicErrorResponse {
+  type: 'error' | 'invalid_request_error';
+  error: {
+    type: string;
+    message: string;
+  };
+}
+
+/**
  * Request event for logging/metrics
  */
 export interface RequestEventData {

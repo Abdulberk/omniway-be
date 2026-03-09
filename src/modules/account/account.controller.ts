@@ -30,7 +30,7 @@ import {
 @Controller('me')
 @UseGuards(UserGuard, UserRateLimitGuard)
 export class AccountController {
-  constructor(private readonly accountService: AccountService) { }
+  constructor(private readonly accountService: AccountService) {}
 
   // ==================== PROFILE ====================
 

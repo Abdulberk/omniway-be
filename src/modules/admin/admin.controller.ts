@@ -25,6 +25,7 @@ import {
   UpdateUserDto,
   UpdateOrgDto,
   WalletAdjustmentDto,
+  CreateApiKeyDto,
   PaginationQuery,
   CreateTopupPackageDto,
   UpdateTopupPackageDto,
@@ -66,7 +67,7 @@ interface GetUsageQuery {
 @Controller('admin')
 @UseGuards(AdminGuard, AdminRateLimitGuard)
 export class AdminController {
-  constructor(private readonly adminService: AdminService) { }
+  constructor(private readonly adminService: AdminService) {}
 
   // ==================== PLAN MANAGEMENT ====================
 
@@ -213,6 +214,15 @@ export class AdminController {
   }
 
   // ==================== API KEY MANAGEMENT ====================
+
+  @Post('api-keys')
+  async createApiKey(@Body() dto: CreateApiKeyDto, @Req() req: AdminRequest) {
+    if (!req.adminUser?.id) {
+      throw new UnauthorizedException('Admin authentication required');
+    }
+    const adminId = req.adminUser.id;
+    return this.adminService.createApiKey(dto, adminId);
+  }
 
   @Get('api-keys')
   async getApiKeys(@Query() query: GetApiKeysQuery) {

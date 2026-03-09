@@ -14,7 +14,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly apiKeyService: ApiKeyService,
     private readonly policyService: PolicyService,
-  ) { }
+  ) {}
 
   /**
    * Authenticate a request and build the auth context

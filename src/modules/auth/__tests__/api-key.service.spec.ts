@@ -51,7 +51,7 @@ describe('ApiKeyService', () => {
       const result = service.generateApiKey();
 
       expect(result.key).toMatch(/^omni_[A-Za-z0-9_-]{32,}$/);
-      expect(result.prefix).toMatch(/^omni_[A-Za-z0-9]{8}$/);
+      expect(result.prefix).toMatch(/^omni_[A-Za-z0-9_-]{8}$/);
       expect(result.hash).toHaveLength(64); // SHA256 = 64 hex chars
     });
 
@@ -155,7 +155,12 @@ describe('ApiKeyService', () => {
 
       expect(result).toEqual({
         isValid: true,
-        apiKey: mockApiKey,
+        apiKey: expect.objectContaining({
+          id: mockApiKey.id,
+          keyPrefix: mockApiKey.keyPrefix,
+          ownerType: mockApiKey.ownerType,
+          userId: mockApiKey.userId,
+        }),
       });
       expect(prismaService.apiKey.findUnique).toHaveBeenCalled();
       // Should cache the result

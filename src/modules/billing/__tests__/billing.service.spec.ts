@@ -8,6 +8,7 @@ import { ApiKeyOwnerType } from '@prisma/client';
 
 // Mock fs module before importing the service
 jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
   readFileSync: jest.fn().mockReturnValue('-- mock lua script'),
 }));
 

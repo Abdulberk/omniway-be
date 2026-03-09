@@ -51,6 +51,7 @@ describe('RateLimitService', () => {
           useValue: {
             getClient: jest.fn().mockReturnValue(mockRedisClient),
             evalLua: jest.fn(),
+            mget: jest.fn(),
           },
         },
       ],
@@ -83,7 +84,7 @@ describe('RateLimitService', () => {
       });
       expect(redisService.evalLua).toHaveBeenCalledWith(
         expect.any(String),
-        expect.arrayContaining([expect.stringContaining('key_123')]),
+        expect.arrayContaining([expect.stringContaining('user:user_123')]),
         expect.arrayContaining([20, 100, 500, expect.any(Number)]),
       );
     });
@@ -161,8 +162,8 @@ describe('RateLimitService', () => {
       });
       expect(redisService.evalLua).toHaveBeenCalledWith(
         expect.any(String),
-        expect.arrayContaining([expect.stringContaining('key_123')]),
-        expect.arrayContaining(['acquire', 'req_123', 10, expect.any(Number)]),
+        expect.arrayContaining([expect.stringContaining('user:user_123')]),
+        expect.arrayContaining([10, 'req_123', expect.any(Number), 'acquire']),
       );
     });
 
@@ -197,33 +198,25 @@ describe('RateLimitService', () => {
 
       expect(redisService.evalLua).toHaveBeenCalledWith(
         expect.any(String),
-        expect.arrayContaining([expect.stringContaining('key_123')]),
-        expect.arrayContaining(['release', 'req_123', expect.any(Number), expect.any(Number)]),
+        expect.arrayContaining([expect.stringContaining('user:user_123')]),
+        expect.arrayContaining([10, 'req_123', expect.any(Number), 'release']),
       );
     });
   });
 
   describe('getCurrentUsage', () => {
     it('should return usage counts from Redis', async () => {
-      const mockRedisClient = {
-        get: jest.fn()
-          .mockResolvedValueOnce('15') // minute
-          .mockResolvedValueOnce('75') // hour
-          .mockResolvedValueOnce('350'), // day
-      };
-      redisService.getClient.mockReturnValue(mockRedisClient as any);
+      redisService.mget.mockResolvedValue(['15', '75', '350', '2']);
 
       const result = await service.getCurrentUsage(authContext);
 
       expect(result).toEqual({
-        minuteUsed: 15,
-        hourUsed: 75,
-        dayUsed: 350,
-        minuteLimit: 20,
-        hourLimit: 100,
-        dayLimit: 500,
+        minute: 15,
+        hour: 75,
+        day: 350,
+        concurrent: 2,
       });
-      expect(mockRedisClient.get).toHaveBeenCalledTimes(3);
+      expect(redisService.mget).toHaveBeenCalled();
     });
   });
 });

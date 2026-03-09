@@ -25,7 +25,7 @@ export class ApiKeyService {
   generateApiKey(): { key: string; prefix: string; hash: string } {
     const randomPart = randomBytes(24).toString('base64url');
     const key = `omni_${randomPart}`;
-    const prefix = key.substring(0, 12); // "omni_" + first 7 chars
+    const prefix = key.substring(0, 13); // "omni_" + first 8 chars
     const hash = this.hashKey(key);
 
     return { key, prefix, hash };

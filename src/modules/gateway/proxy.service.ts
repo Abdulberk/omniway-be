@@ -9,6 +9,8 @@ import {
   ChatCompletionRequest,
   ChatCompletionResponse,
   RequestEventData,
+  AnthropicMessageRequest,
+  AnthropicMessageResponse,
 } from './interfaces/gateway.interfaces';
 import { AuthContext } from '../auth/interfaces/auth.interfaces';
 import { StreamMetricsWrapper, StreamMetrics, wrapStream } from './stream';
@@ -170,6 +172,152 @@ export class ProxyService {
       };
 
       throw Object.assign(error, { eventData: errorEventData });
+    }
+  }
+
+  /**
+   * Proxy an Anthropic messages request (for Claude Code)
+   */
+  async proxyAnthropicMessage(
+    request: AnthropicMessageRequest,
+    authContext: AuthContext,
+    requestId: string,
+    clientIp?: string,
+    userAgent?: string,
+  ): Promise<{
+    response?: AnthropicMessageResponse;
+    stream?: StreamMetricsWrapper;
+    streamingResult?: StreamingResult;
+    eventData: Partial<RequestEventData>;
+  }> {
+    const startTime = Date.now();
+    const isStreaming = request.stream === true;
+
+    // Get model info
+    const model = await this.modelService.getModelOrThrow(request.model);
+
+    // Get provider config
+    const provider = this.modelService.getProvider(model.provider);
+    if (!provider) {
+      throw new HttpException(
+        {
+          type: 'error',
+          error: {
+            type: 'api_error',
+            message: `Provider '${model.provider}' not configured`,
+          },
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // Check circuit breaker
+    await this.circuitBreaker.checkCircuit(model.provider);
+
+    // Validate streaming capability
+    if (isStreaming && !model.supportsStreaming) {
+      throw new HttpException(
+        {
+          type: 'error',
+          error: {
+            type: 'invalid_request_error',
+            message: `Model '${model.modelId}' does not support streaming`,
+          },
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validate request constraints (similar to chat completions)
+    this.validateAnthropicRequest(request, authContext, model);
+
+    // Build proxy context
+    const proxyContext: ProxyContext = {
+      requestId,
+      model,
+      provider,
+      isStreaming,
+      startTime,
+    };
+
+    // Prepare the upstream request
+    const upstreamRequest = this.buildUpstreamAnthropicRequest(request, model);
+    const inputBytes = JSON.stringify(upstreamRequest).length;
+
+    // Base event data
+    const baseEventData: Partial<RequestEventData> = {
+      requestId,
+      ownerType: authContext.ownerType,
+      ownerId: authContext.ownerId,
+      projectId: authContext.projectId,
+      apiKeyId: authContext.apiKeyId,
+      model: model.modelId,
+      provider: model.provider,
+      endpoint: '/v1/messages',
+      isStreaming,
+      inputBytes,
+      clientIp,
+      userAgent,
+    };
+
+    try {
+      if (isStreaming) {
+        const streamingResult = await this.proxyAnthropicStreamingRequest(
+          upstreamRequest,
+          proxyContext,
+        );
+        return {
+          stream: streamingResult.stream,
+          streamingResult,
+          eventData: baseEventData,
+        };
+      } else {
+        const { response, latencyMs, ttfbMs, outputBytes, usage } =
+          await this.proxyAnthropicNonStreamingRequest(
+            upstreamRequest,
+            proxyContext,
+          );
+
+        // Record success
+        await this.circuitBreaker.recordSuccess(model.provider);
+
+        return {
+          response,
+          eventData: {
+            ...baseEventData,
+            status: 'SUCCESS',
+            statusCode: 200,
+            latencyMs,
+            ttfbMs,
+            outputBytes,
+            inputTokens: usage?.input_tokens,
+            outputTokens: usage?.output_tokens,
+          },
+        };
+      }
+    } catch (error) {
+      const latencyMs = Date.now() - startTime;
+
+      // Record failure for circuit breaker
+      if (this.isUpstreamError(error)) {
+        await this.circuitBreaker.recordFailure(model.provider);
+      }
+
+      // Build error event data
+      const errorEventData: Partial<RequestEventData> = {
+        ...baseEventData,
+        latencyMs,
+        status: this.getErrorStatus(error),
+        statusCode: this.getErrorStatusCode(error),
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        outputBytes: 0,
+      };
+
+      // Throw with event data attached
+      const err = error instanceof Error ? error : new Error(String(error));
+      (err as any).eventData = errorEventData;
+      throw err;
     }
   }
 
@@ -533,5 +681,293 @@ export class ProxyService {
       return 504;
     }
     return 500;
+  }
+
+  /**
+   * Validate Anthropic message request
+   */
+  private validateAnthropicRequest(
+    request: AnthropicMessageRequest,
+    authContext: AuthContext,
+    model: ModelInfo,
+  ): void {
+    const { policy } = authContext;
+
+    // Check max_tokens
+    if (request.max_tokens && request.max_tokens > policy.maxOutputTokens) {
+      throw new HttpException(
+        {
+          type: 'error',
+          error: {
+            type: 'invalid_request_error',
+            message: `max_tokens (${request.max_tokens}) exceeds plan limit (${policy.maxOutputTokens})`,
+          },
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Check model output limit
+    if (request.max_tokens && request.max_tokens > model.maxOutputTokens) {
+      throw new HttpException(
+        {
+          type: 'error',
+          error: {
+            type: 'invalid_request_error',
+            message: `max_tokens (${request.max_tokens}) exceeds model limit (${model.maxOutputTokens})`,
+          },
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Check streaming permission
+    if (request.stream && !policy.hasStreaming) {
+      throw new HttpException(
+        {
+          type: 'error',
+          error: {
+            type: 'invalid_request_error',
+            message: 'Streaming is not available on your plan',
+          },
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+  /**
+   * Build upstream Anthropic request
+   */
+  private buildUpstreamAnthropicRequest(
+    request: AnthropicMessageRequest,
+    model: ModelInfo,
+  ): AnthropicMessageRequest {
+    return {
+      ...request,
+      model: model.upstreamModelId, // Map to upstream model ID
+    };
+  }
+
+  /**
+   * Proxy non-streaming Anthropic request
+   */
+  private async proxyAnthropicNonStreamingRequest(
+    request: AnthropicMessageRequest,
+    context: ProxyContext,
+  ): Promise<{
+    response: AnthropicMessageResponse;
+    latencyMs: number;
+    ttfbMs: number;
+    outputBytes: number;
+    usage?: AnthropicMessageResponse['usage'];
+  }> {
+    const { provider, requestId } = context;
+    const url = `${provider.baseUrl}/v1/messages`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, provider.timeout.read);
+
+    let ttfbTime: number | undefined;
+
+    try {
+      const fetchStart = Date.now();
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': provider.apiKey,
+          'anthropic-version': '2023-06-01',
+          'X-Request-ID': requestId,
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+
+      ttfbTime = Date.now() - fetchStart;
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new HttpException(
+          this.parseAnthropicError(errorBody, response.status),
+          response.status,
+        );
+      }
+
+      const data = (await response.json()) as AnthropicMessageResponse;
+      const latencyMs = Date.now() - context.startTime;
+      const outputBytes = JSON.stringify(data).length;
+
+      return {
+        response: data,
+        latencyMs,
+        ttfbMs: ttfbTime,
+        outputBytes,
+        usage: data.usage,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /**
+   * Proxy streaming Anthropic request
+   */
+  private async proxyAnthropicStreamingRequest(
+    request: AnthropicMessageRequest,
+    context: ProxyContext,
+  ): Promise<StreamingResult> {
+    const { provider, requestId, model } = context;
+    const url = `${provider.baseUrl}/v1/messages`;
+
+    const controller = new AbortController();
+    const maxDuration = this.config.get<number>(
+      'STREAM_MAX_DURATION_MS',
+      300000,
+    );
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, maxDuration);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': provider.apiKey,
+          'anthropic-version': '2023-06-01',
+          'X-Request-ID': requestId,
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        clearTimeout(timeout);
+        const errorBody = await response.text();
+        throw new HttpException(
+          this.parseAnthropicError(errorBody, response.status),
+          response.status,
+        );
+      }
+
+      if (!response.body) {
+        clearTimeout(timeout);
+        throw new HttpException(
+          {
+            type: 'error',
+            error: {
+              type: 'api_error',
+              message: 'No response body from upstream',
+            },
+          },
+          HttpStatus.BAD_GATEWAY,
+        );
+      }
+
+      // Convert web stream to Node readable
+      const reader = response.body.getReader();
+      const rawReadable = new Readable({
+        async read() {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              clearTimeout(timeout);
+              this.push(null);
+            } else {
+              this.push(Buffer.from(value));
+            }
+          } catch (error) {
+            clearTimeout(timeout);
+            this.destroy(
+              error instanceof Error ? error : new Error(String(error)),
+            );
+          }
+        },
+        destroy(err, callback) {
+          clearTimeout(timeout);
+          reader.cancel().catch(() => {});
+          callback(err);
+        },
+      });
+
+      // Wrap with metrics tracking
+      const metricsWrapper = wrapStream(rawReadable, requestId, {
+        maxDurationMs: maxDuration,
+        onFirstChunk: (ttfbMs: number) => {
+          this.logger.debug(
+            `Anthropic stream TTFB for ${requestId}: ${ttfbMs}ms`,
+          );
+        },
+        onMetrics: (metrics: StreamMetrics) => {
+          if (metrics.status === 'COMPLETED') {
+            this.logger.debug(
+              `Anthropic stream completed for ${requestId}: ` +
+                `status=${metrics.status}, chunks=${metrics.chunkCount}, bytes=${metrics.outputBytes}`,
+            );
+            this.circuitBreaker.recordSuccess(model.provider).catch(() => {});
+          } else if (
+            metrics.status === 'UPSTREAM_ERROR' ||
+            metrics.status === 'TIMEOUT'
+          ) {
+            this.logger.warn(
+              `Anthropic stream error for ${requestId}: ${metrics.errorMessage}, ` +
+                `status=${metrics.status}, ttfb=${metrics.ttfbMs}`,
+            );
+            this.circuitBreaker.recordFailure(model.provider).catch(() => {});
+          }
+        },
+        onError: (error: Error) => {
+          this.logger.warn(
+            `Anthropic stream error for ${requestId}: ${error.message}`,
+          );
+        },
+      });
+
+      return {
+        stream: metricsWrapper,
+        getMetrics: () => metricsWrapper.getMetrics(),
+        isRefundEligible: () => metricsWrapper.isRefundEligible(),
+      };
+    } catch (error) {
+      clearTimeout(timeout);
+      throw error;
+    }
+  }
+
+  /**
+   * Parse Anthropic error response
+   */
+  private parseAnthropicError(
+    body: string,
+    statusCode: number,
+  ): { type: string; error: { type: string; message: string } } {
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed.error) {
+        return {
+          type: 'error',
+          error: {
+            type: parsed.error.type || 'api_error',
+            message: parsed.error.message || 'Upstream error',
+          },
+        };
+      }
+    } catch {
+      // Not JSON
+    }
+
+    return {
+      type: 'error',
+      error: {
+        type: 'api_error',
+        message: `Upstream error (${statusCode}): ${body.substring(0, 200)}`,
+      },
+    };
   }
 }

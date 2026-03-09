@@ -219,7 +219,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('should extract IP from X-Forwarded-For header', async () => {
+    it('should trust request.ip when proxy headers are present', async () => {
       const request = {
         ...mockRequest,
         headers: {
@@ -240,11 +240,11 @@ describe('AuthService', () => {
 
       expect(apiKeyService.updateLastUsed).toHaveBeenCalledWith(
         testApiKeyData.id,
-        '203.0.113.42',
+        '127.0.0.1',
       );
     });
 
-    it('should extract IP from X-Real-IP header', async () => {
+    it('should ignore X-Real-IP and use request.ip', async () => {
       const request = {
         ...mockRequest,
         headers: {
@@ -265,7 +265,7 @@ describe('AuthService', () => {
 
       expect(apiKeyService.updateLastUsed).toHaveBeenCalledWith(
         testApiKeyData.id,
-        '203.0.113.99',
+        '127.0.0.1',
       );
     });
 

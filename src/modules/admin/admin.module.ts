@@ -13,4 +13,4 @@ import { AuthModule } from '../auth/auth.module';
   providers: [AdminService, AdminGuard, AdminRateLimitGuard],
   exports: [AdminService],
 })
-export class AdminModule { }
+export class AdminModule {}

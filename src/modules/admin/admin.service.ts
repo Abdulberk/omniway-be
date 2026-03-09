@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
+import { ApiKeyService } from '../auth/api-key.service';
 import {
   CreatePlanDto,
   UpdatePlanDto,
@@ -21,6 +22,8 @@ import {
   ModelPricingResponse,
   AdminUserResponse,
   AdminOrgResponse,
+  CreateApiKeyDto,
+  CreateApiKeyResponse,
   AdminApiKeyResponse,
   UsageOverviewResponse,
   AuditLogResponse,
@@ -35,12 +38,15 @@ import {
   Prisma,
   ApiKeyOwnerType,
 } from '@prisma/client';
+import { AUTH_CACHE_KEYS } from '../auth/interfaces/auth.interfaces';
+import { BILLING_KEYS } from '../billing/interfaces/billing.interfaces';
 
 @Injectable()
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly apiKeyService: ApiKeyService,
   ) {}
 
   // ==================== PLAN MANAGEMENT ====================
@@ -698,7 +704,7 @@ export class AdminService {
     });
     if (newBalance) {
       await this.redis.set(
-        `wallet:user:${userId}`,
+        BILLING_KEYS.walletBalance('user', userId),
         newBalance.balanceCents.toString(),
         3600,
       );
@@ -925,7 +931,7 @@ export class AdminService {
     });
     if (newBalance) {
       await this.redis.set(
-        `wallet:org:${orgId}`,
+        BILLING_KEYS.walletBalance('org', orgId),
         newBalance.balanceCents.toString(),
         3600,
       );
@@ -935,6 +941,88 @@ export class AdminService {
   }
 
   // ==================== API KEY MANAGEMENT ====================
+
+  async createApiKey(
+    dto: CreateApiKeyDto,
+    adminId: string,
+  ): Promise<CreateApiKeyResponse> {
+    // Validate that either userId or projectId is provided
+    if (!dto.userId && !dto.projectId) {
+      throw new BadRequestException(
+        'Either userId or projectId must be provided',
+      );
+    }
+
+    if (dto.userId && dto.projectId) {
+      throw new BadRequestException('Cannot specify both userId and projectId');
+    }
+
+    // Verify user or project exists
+    if (dto.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: dto.userId },
+      });
+      if (!user) {
+        throw new NotFoundException(`User with id "${dto.userId}" not found`);
+      }
+    }
+
+    if (dto.projectId) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: dto.projectId },
+      });
+      if (!project) {
+        throw new NotFoundException(
+          `Project with id "${dto.projectId}" not found`,
+        );
+      }
+    }
+
+    // Use ApiKeyService to create the key
+    const scopes = dto.scopes || ['chat:write', 'embeddings:write'];
+    let result;
+    if (dto.userId) {
+      result = await this.apiKeyService.createUserApiKey(
+        dto.userId,
+        dto.name,
+        scopes,
+      );
+    } else {
+      result = await this.apiKeyService.createProjectApiKey(
+        dto.projectId!,
+        dto.name,
+        scopes,
+      );
+    }
+
+    // Audit log
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: adminId,
+        actorType: 'user',
+        action: AuditAction.API_KEY_CREATED,
+        targetType: 'api_key',
+        targetId: result.id,
+        metadata: {
+          keyPrefix: result.prefix,
+          name: dto.name,
+          ownerId: dto.userId || dto.projectId,
+          ownerType: dto.userId ? 'USER' : 'PROJECT',
+        },
+      },
+    });
+
+    return {
+      id: result.id,
+      key: result.key, // Full key, only shown at creation
+      keyPrefix: result.prefix,
+      name: dto.name,
+      ownerType: dto.userId ? 'USER' : 'PROJECT',
+      userId: dto.userId || null,
+      projectId: dto.projectId || null,
+      createdAt: new Date(),
+    };
+  }
 
   async getApiKeys(
     params: PaginationQuery & {
@@ -1042,8 +1130,7 @@ export class AdminService {
       }),
     ]);
 
-    // Remove from Redis cache
-    await this.redis.del(`apikey:${key.keyHash}`);
+    await this.apiKeyService.invalidateApiKeyCache(key.keyHash);
   }
 
   // ==================== TOPUP PACKAGES ====================
@@ -1353,10 +1440,10 @@ export class AdminService {
     const keys: string[] = [];
     for (const sub of subscriptions) {
       if (sub.userId) {
-        keys.push(`policy:USER:${sub.userId}`);
+        keys.push(AUTH_CACHE_KEYS.policy('user', sub.userId));
       }
       if (sub.organizationId) {
-        keys.push(`policy:PROJECT:${sub.organizationId}`);
+        keys.push(AUTH_CACHE_KEYS.policy('org', sub.organizationId));
       }
     }
 
@@ -1366,19 +1453,10 @@ export class AdminService {
   }
 
   private async invalidateUserPolicyCache(userId: string): Promise<void> {
-    await this.redis.del(`policy:USER:${userId}`);
+    await this.redis.del(AUTH_CACHE_KEYS.policy('user', userId));
   }
 
   private async invalidateOrgPolicyCaches(orgId: string): Promise<void> {
-    // Invalidate all projects under this org
-    const projects = await this.prisma.project.findMany({
-      where: { organizationId: orgId },
-      select: { id: true },
-    });
-
-    const keys = projects.map((p) => `policy:PROJECT:${p.id}`);
-    if (keys.length > 0) {
-      await Promise.all(keys.map((k) => this.redis.del(k)));
-    }
+    await this.redis.del(AUTH_CACHE_KEYS.policy('org', orgId));
   }
 }

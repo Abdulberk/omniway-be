@@ -37,11 +37,12 @@ export class ModelService {
       120000,
     );
 
+    // Yuxor reproxy configuration - all providers use same base URL
     this.providerConfigs.set('openai', {
       name: 'openai',
       baseUrl: this.config.get<string>(
         'UPSTREAM_OPENAI_URL',
-        'https://api.o7.team/openai',
+        'https://api.yuxor.tech',
       ),
       apiKey: upstreamApiKey,
       timeout: { connect: connectTimeout, read: readTimeout },
@@ -51,7 +52,7 @@ export class ModelService {
       name: 'anthropic',
       baseUrl: this.config.get<string>(
         'UPSTREAM_ANTHROPIC_URL',
-        'https://api.o7.team/anthropic',
+        'https://api.yuxor.tech',
       ),
       apiKey: upstreamApiKey,
       timeout: { connect: connectTimeout, read: readTimeout },
@@ -61,7 +62,7 @@ export class ModelService {
       name: 'google',
       baseUrl: this.config.get<string>(
         'UPSTREAM_OPENAI_COMPATIBLE_URL',
-        'https://api.o7.team/openai-compatible',
+        'https://api.yuxor.tech',
       ),
       apiKey: upstreamApiKey,
       timeout: { connect: connectTimeout, read: readTimeout },

@@ -13,4 +13,4 @@ import { AuthModule } from '../auth/auth.module';
   providers: [AccountService, UserGuard, UserRateLimitGuard],
   exports: [AccountService],
 })
-export class AccountModule { }
+export class AccountModule {}

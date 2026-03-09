@@ -138,6 +138,8 @@ describe('RefundService', () => {
         amountCents: 5,
         requestId: 'req-123',
         reason: 'upstream failure',
+      }, {
+        syncRedis: false,
       });
     });
 

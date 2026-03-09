@@ -11,18 +11,15 @@ describe('CircuitBreakerService', () => {
   let mockRedisClient: any;
 
   const configDefaults: Record<string, any> = {
-    'circuit.failureThreshold': 5,
-    'circuit.retryDelayMs': 30000,
-    'circuit.halfOpenMaxAttempts': 3,
+    CIRCUIT_BREAKER_THRESHOLD: 5,
+    CIRCUIT_BREAKER_RESET_MS: 30000,
   };
 
   beforeEach(async () => {
     mockRedisClient = {
       get: jest.fn(),
-      set: jest.fn(),
+      setex: jest.fn(),
       del: jest.fn(),
-      keys: jest.fn(),
-      mget: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -95,10 +92,10 @@ describe('CircuitBreakerService', () => {
       const result = await service.isOpen('openai');
 
       expect(result).toBe(false);
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
+      expect(mockRedisClient.setex).toHaveBeenCalledWith(
         expect.stringContaining('circuit:openai'),
+        expect.any(Number),
         expect.stringContaining('"status":"half-open"'),
-        expect.any(Object),
       );
     });
   });
@@ -137,10 +134,8 @@ describe('CircuitBreakerService', () => {
 
       await service.recordSuccess('openai');
 
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
+      expect(mockRedisClient.del).toHaveBeenCalledWith(
         expect.stringContaining('circuit:openai'),
-        expect.stringContaining('"status":"closed"'),
-        expect.any(Object),
       );
     });
 
@@ -149,7 +144,7 @@ describe('CircuitBreakerService', () => {
 
       await service.recordSuccess('openai');
 
-      expect(mockRedisClient.set).not.toHaveBeenCalled();
+      expect(mockRedisClient.del).not.toHaveBeenCalled();
     });
   });
 
@@ -165,15 +160,15 @@ describe('CircuitBreakerService', () => {
 
       await service.recordFailure('openai');
 
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
+      expect(mockRedisClient.setex).toHaveBeenCalledWith(
         expect.stringContaining('circuit:openai'),
+        expect.any(Number),
         expect.stringMatching(/"failures":3/),
-        expect.any(Object),
       );
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
+      expect(mockRedisClient.setex).toHaveBeenCalledWith(
         expect.stringContaining('circuit:openai'),
+        expect.any(Number),
         expect.stringMatching(/"status":"closed"/),
-        expect.any(Object),
       );
     });
 
@@ -188,20 +183,20 @@ describe('CircuitBreakerService', () => {
 
       await service.recordFailure('openai');
 
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
+      expect(mockRedisClient.setex).toHaveBeenCalledWith(
         expect.stringContaining('circuit:openai'),
+        expect.any(Number),
         expect.stringMatching(/"status":"open"/),
-        expect.any(Object),
       );
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
+      expect(mockRedisClient.setex).toHaveBeenCalledWith(
         expect.stringContaining('circuit:openai'),
+        expect.any(Number),
         expect.stringMatching(/"failures":5/),
-        expect.any(Object),
       );
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
+      expect(mockRedisClient.setex).toHaveBeenCalledWith(
         expect.stringContaining('circuit:openai'),
+        expect.any(Number),
         expect.stringMatching(/"nextRetry":\d+/),
-        expect.any(Object),
       );
     });
 
@@ -216,10 +211,10 @@ describe('CircuitBreakerService', () => {
 
       await service.recordFailure('openai');
 
-      expect(mockRedisClient.set).toHaveBeenCalledWith(
+      expect(mockRedisClient.setex).toHaveBeenCalledWith(
         expect.stringContaining('circuit:openai'),
+        expect.any(Number),
         expect.stringMatching(/"status":"open"/),
-        expect.any(Object),
       );
     });
   });
@@ -253,14 +248,17 @@ describe('CircuitBreakerService', () => {
 
   describe('getAllStates', () => {
     it('should return states for all providers', async () => {
-      mockRedisClient.keys.mockResolvedValue([
-        'circuit:openai',
-        'circuit:anthropic',
-      ]);
-      mockRedisClient.mget.mockResolvedValue([
-        JSON.stringify({ status: 'closed', failures: 0, lastFailure: null, nextRetry: null }),
-        JSON.stringify({ status: 'open', failures: 5, lastFailure: Date.now(), nextRetry: Date.now() + 30000 }),
-      ]);
+      mockRedisClient.get
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            status: 'open',
+            failures: 5,
+            lastFailure: Date.now(),
+            nextRetry: Date.now() + 30000,
+          }),
+        )
+        .mockResolvedValueOnce(null);
 
       const result = await service.getAllStates();
 
@@ -268,7 +266,7 @@ describe('CircuitBreakerService', () => {
       expect(result).toHaveProperty('anthropic');
       expect(result.openai.status).toBe('closed');
       expect(result.anthropic.status).toBe('open');
-      expect(mockRedisClient.keys).toHaveBeenCalledWith(expect.stringContaining('circuit:*'));
+      expect(mockRedisClient.get).toHaveBeenCalledTimes(3);
     });
   });
 });

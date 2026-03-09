@@ -26,7 +26,7 @@ export class StripeWebhookController {
     private readonly stripeService: StripeService,
     private readonly prisma: PrismaService,
     @InjectQueue(STRIPE_QUEUES.WEBHOOKS) private readonly webhookQueue: Queue,
-  ) { }
+  ) {}
 
   @Post()
   async handleWebhook(

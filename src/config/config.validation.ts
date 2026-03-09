@@ -7,18 +7,29 @@ export const configValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().default(3000),
   HOST: Joi.string().default('0.0.0.0'),
-  CORS_ORIGINS: Joi.string()
-    .custom((value, helpers) => {
-      // In production, wildcard '*' is not allowed for security
-      if (helpers.prefs.context?.NODE_ENV === 'production' && value === '*') {
-        return helpers.error('cors.wildcard');
-      }
-      return value;
+  CORS_ORIGINS: Joi.alternatives()
+    .conditional('NODE_ENV', {
+      is: 'production',
+      then: Joi.string()
+        .trim()
+        .required()
+        .custom((value, helpers) => {
+          const origins = value
+            .split(',')
+            .map((origin: string) => origin.trim())
+            .filter(Boolean);
+
+          if (origins.length === 0 || origins.includes('*')) {
+            return helpers.error('cors.wildcard');
+          }
+
+          return value;
+        }),
+      otherwise: Joi.string().trim().default('*'),
     })
-    .default('*')
     .messages({
       'cors.wildcard':
-        'CORS_ORIGINS cannot be "*" in production. Specify allowed origins explicitly.',
+        'CORS_ORIGINS cannot include "*" in production. Specify allowed origins explicitly.',
     }),
   LOG_LEVEL: Joi.string()
     .valid('fatal', 'error', 'warn', 'info', 'debug', 'trace')

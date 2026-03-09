@@ -32,7 +32,7 @@ export interface CreatePlanDto {
   hasPriorityQueue?: boolean;
 }
 
-export interface UpdatePlanDto extends Partial<CreatePlanDto> {}
+export type UpdatePlanDto = Partial<CreatePlanDto>;
 
 export interface PlanResponse {
   id: string;
@@ -137,7 +137,7 @@ export interface CreateModelDto {
   category?: string;
 }
 
-export interface UpdateModelDto extends Partial<CreateModelDto> {}
+export type UpdateModelDto = Partial<CreateModelDto>;
 
 export interface ModelResponse {
   id: string;
@@ -211,6 +211,25 @@ export interface UsageOverviewResponse {
   }>;
 }
 
+// API key creation (admin)
+export interface CreateApiKeyDto {
+  name: string;
+  userId?: string;
+  projectId?: string;
+  scopes?: string[];
+}
+
+export interface CreateApiKeyResponse {
+  id: string;
+  key: string; // Only shown once at creation
+  keyPrefix: string;
+  name: string;
+  ownerType: string;
+  userId: string | null;
+  projectId: string | null;
+  createdAt: Date;
+}
+
 // API key management (admin)
 export interface AdminApiKeyResponse {
   id: string;
@@ -250,7 +269,7 @@ export interface CreateTopupPackageDto {
   sortOrder?: number;
 }
 
-export interface UpdateTopupPackageDto extends Partial<CreateTopupPackageDto> {}
+export type UpdateTopupPackageDto = Partial<CreateTopupPackageDto>;
 
 export interface TopupPackageResponse {
   id: string;

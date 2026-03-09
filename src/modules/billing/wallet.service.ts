@@ -260,8 +260,10 @@ export class WalletService {
    */
   async refund(
     params: WalletRefundParams,
+    options: { syncRedis?: boolean } = {},
   ): Promise<{ success: boolean; newBalance: bigint }> {
     const { ownerType, ownerId, amountCents, requestId, reason } = params;
+    const syncRedis = options.syncRedis ?? true;
 
     if (amountCents <= 0) {
       return { success: false, newBalance: BigInt(0) };
@@ -296,15 +298,16 @@ export class WalletService {
         return wallet;
       });
 
-      // Update Redis cache using INCRBY
-      const balanceKey = BILLING_KEYS.walletBalance(ownerType, ownerId);
-      try {
-        await this.redis.getClient().incrby(balanceKey, amountCents);
-      } catch (error) {
-        this.logger.error(
-          `Failed to update Redis for refund ${ownerType}:${ownerId}`,
-          error,
-        );
+      if (syncRedis) {
+        const balanceKey = BILLING_KEYS.walletBalance(ownerType, ownerId);
+        try {
+          await this.redis.getClient().incrby(balanceKey, amountCents);
+        } catch (error) {
+          this.logger.error(
+            `Failed to update Redis for refund ${ownerType}:${ownerId}`,
+            error,
+          );
+        }
       }
 
       this.logger.log(
